@@ -43,7 +43,7 @@ class DynamicsFeature:
         return await self.history(ctx, **values)
 
     @tool('asoul_fanart', '搜索二创/物料或随机查询；request.action 为 search 或 random。'
-          '列表返回真实 sourceDynamicId 和游标；图片 URL 不代表已发送或已看过像素。',
+          '列表返回真实 sourceDynamicId 和游标。',
           summary='搜索或随机查询 A-SOUL 二创')
     async def query_fanart(self, ctx: Invocation,
                            request: Annotated[FanartRequest, Field(description='二创搜索或随机请求')]) -> dict:

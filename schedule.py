@@ -288,7 +288,7 @@ class CalendarFeature:
                         "end": None if event.end_at is None else event.end_at.astimezone(zone).isoformat(),
                         "title": event.title, "host": event.host_signature, "url": event.url,
                         "special_follow": highlight_key(event) in marked} for event in events],
-            "note": "日历未收录不代表确定没有直播；日程时间不证明实际开播。special_follow 是群友手动标记的特别关注。",
+            "note": "special_follow 是群友手动标记的特别关注。",
         }
 
     @background(every="1m")
@@ -308,7 +308,6 @@ class CalendarFeature:
             for scene in ctx.scenes:
                 zone = ZoneInfo(ctx.timezone(scene))
                 left = max(1, round((event.start_at - now).total_seconds() / 60))
-                await ctx.emit_event(scene, f"日历显示：{self.line(event, zone)}，大约还有 {left} 分钟开始。{follow}"
-                                            "这是日历安排，不证明实际已经开播。")
+                await ctx.emit_event(scene, f"日历显示：{self.line(event, zone)}，大约还有 {left} 分钟开始。{follow}")
             reminded = (reminded + [key])[-KEEP_REMINDED:]
             Path(self.reminded_path).write_text(json.dumps(reminded, ensure_ascii=False), encoding="utf-8")
