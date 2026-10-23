@@ -3,7 +3,7 @@
 LenBot 插件接口 1 的 A-SOUL 合集，插件名 `asoul`。包含两部分：
 
 - **日程**：读取一个 ICS 日历（默认枝江站 `https://asoul.love/calendar.ics`），`/日程` 命令和「今日直播」全文直接发日程卡片，可以把某场设为特别关注，`live_schedule` 工具按日期查询，开播前向启用的群发场景事件。
-- **动态**：访问 A-SOUL 动态查询站（默认 `https://len5010.top/dynamics/api`）的公开接口，查询成员、动态、历史同日和二创，并能把正文卡片和来源原图发到本群。不读取任何账号。
+- **动态**：访问 A-SOUL 动态查询站（默认 `https://len5010.top/dynamics/api`）的公开接口，查询成员、动态、历史同日和二创，并能把正文卡片和来源原图发到本群。
 
 ## 安装
 
@@ -52,15 +52,15 @@ LenBot 插件接口 1 的 A-SOUL 合集，插件名 `asoul`。包含两部分：
 
 ## 动态
 
-- `asoul_dynamics(request)`：action 为 members、search、read、history；最近动态用 search 并省略 query。member 可用源站 ID 或完整名称；按成员表精确匹配，不猜别名。nextCursor 原样续页。
-- `asoul_fanart(request)`：action 为 search 或 random。搜索支持分页、来源和分类；随机查询不缓存，不接受分页游标。
+- `asoul_dynamics(request)`：action 为 members、search、read、history；最近动态用 search 并省略 query。member 可用源站 ID 或完整名称，按成员表精确匹配。nextCursor 原样续页。
+- `asoul_fanart(request)`：action 为 search 或 random。搜索支持分页、来源和分类；随机查询每次重新请求，没有分页游标。
 - `asoul_send_card(request)`：action 为 dynamic 或 fanart，各自要求来源 dynamicId／sourceDynamicId；include_images=false 只发正文与链接。
 
 连同 `live_schedule` 共四项能力。每个操作的必填、可选字段由 requests.py 的类型分支说明；未知字段直接报错。查询与发送分开。
 
-发卡片会重新查询源项，正文、转发原文、指标和媒体信息分页排版，不裁剪长文。原图按来源顺序发送，保留 GIF，重复 URL 只发一次。全部内容准备好才开始发送；平台发送中途失败保留已确认的部分，不重发。返回的 `delivery` 是实际发送状态。
+发卡片会重新查询源项，正文、转发原文、指标和媒体信息分页排版，长文完整保留。原图按来源顺序发送，保留 GIF，重复 URL 只发一次。全部内容准备好才开始发送；平台发送中途失败时停止，已确认的部分保留。返回的 `delivery` 是实际发送状态。
 
-HTTP 单次请求，不跟随跳转、不读环境代理、不重试。成功的查询页最多缓存 16 页，过期后请求失败就报错，不返回旧页；源站返回的 409（快照已变化）原文返回。
+HTTP 请求直接连接源站，每次只发一次。成功的查询页最多缓存 16 页，缓存过期后请求失败就报错；源站返回的 409（快照已变化）原文返回。
 
 ## 字体与表情
 
@@ -74,14 +74,14 @@ HTTP 单次请求，不跟随跳转、不读环境代理、不重试。成功的
 uv run --project ../LenBot --no-sync pytest -q
 ```
 
-测试用本地 HTTP 服务模拟日历和动态站，不访问真实站点。真实源站和 QQ 内的展示效果未在测试中验证。
+测试用本地 HTTP 服务模拟日历和动态站。
 
-许可证：GNU AGPL v3 或更新版本，见 [LICENSE](LICENSE)；来源说明见 [SOURCE.md](SOURCE.md)。查询和转发的内容仍属于原作者。
+许可证：GNU AGPL v3 或更新版本，见 [LICENSE](LICENSE)；来源说明见 [SOURCE.md](SOURCE.md)。查询和转发的内容版权归原作者。
 
 ## 工具接口
 
-工具采用接口 1 的显式简介、Field 参数说明与 `prompts/tools.md` 共享指南，返回原生 JSON 或文本。用 `PluginTest.preview_tools()` 查看模型说明、参数与可用性；模型服务默认关闭，真实发送仍单独核对。兼容和更新事项见 [CHANGELOG](CHANGELOG.md)。
+工具采用接口 1 的显式简介、Field 参数说明与 `prompts/tools.md` 共享指南，返回原生 JSON 或文本。用 `PluginTest.preview_tools()` 查看模型说明、参数与可用性；测试里模型服务默认关闭。兼容和更新事项见 [CHANGELOG](CHANGELOG.md)。
 
-CI 调用 LenBot 的可复用工作流，跟随宿主 master 测试；本次未创建版本标签或 Release。catalog-entry.json 只记录开发安装来源，未公开插件不加入主目录。
+CI 调用 LenBot 的可复用工作流，跟随宿主 master 测试。catalog-entry.json 记录目录条目的安装来源。
 
-本机生成 ZIP（LenBot 仓库与本仓库放在同一目录下）：`uv run --no-project --python 3.13 python ../LenBot/scripts/package_plugin.py . /tmp/plugin.zip`。打包取 Git 已跟踪的运行源码和资源，新增文件需先加入 Git；不会收录本机环境、测试或配置。
+本机生成 ZIP（LenBot 仓库与本仓库放在同一目录下）：`uv run --no-project --python 3.13 python ../LenBot/scripts/package_plugin.py . /tmp/plugin.zip`。打包取 Git 已跟踪的运行源码和资源，新增文件需先加入 Git。

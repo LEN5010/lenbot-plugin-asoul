@@ -85,18 +85,18 @@ group = "动态"
 placeholder = "https://example.com/dynamics/api"
 type = "url"
 default = "https://len5010.top/dynamics/api"
-description = "动态站公开 API 根地址，默认 A-SOUL 动态查询站；不读取站点账号。"
+description = "动态站公开 API 根地址，默认 A-SOUL 动态查询站。"
 
 [config.dynamics_cache_seconds]
 label = "动态缓存时间（秒）"
 group = "动态"
 type = "number"
 default = 120
-description = "成功查询的进程内缓存秒数（最多16页）；0关闭。随机与明确详情不缓存。"
+description = "成功查询的进程内缓存秒数（最多16页）；0关闭。随机查询和明确详情每次重新请求。"
 
 [config.request_timeout_seconds]
 label = "超时（秒）"
 group = "高级"
 type = "number"
 default = 15
-description = "读取日历或动态站的单次 HTTP 超时秒数，失败不重试、不跟随跳转。"
+description = "读取日历或动态站的单次 HTTP 超时秒数。"
