@@ -1,5 +1,5 @@
 name = "asoul"
-version = "1.2.1"
+version = "1.2.2"
 interface = 1
 permissions = ["send", "events"]
 requires_lenbot = ">=0.2,<1"
