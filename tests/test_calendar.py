@@ -57,6 +57,17 @@ async def test_schedule_command_and_tool_read_the_calendar(source):
 
 
 @pytest.mark.asyncio
+async def test_schedule_command_answers_in_a_telegram_group(source):
+    today = datetime.now(ZONE).replace(hour=0, minute=0, second=1, microsecond=0)
+    source.text("/calendar.ics", calendar(("a", today, "嘉然直播", "嘉然")))
+    scene = "telegram:group:-1001234"
+    async with PluginTest(PACKAGE, config=config(source, remind_minutes=0, card_mode="text"),
+                          scenes=(scene,), bots={"telegram": "telegram:7001"}) as bot:
+        assert await bot.message("/日程", scene=scene, sender="telegram:501")
+        assert bot.deliveries[-1].scene == scene and "嘉然直播（嘉然）" in bot.deliveries[-1].text
+
+
+@pytest.mark.asyncio
 async def test_reminder_is_sent_once_per_event(source):
     soon = datetime.now(ZONE).replace(microsecond=0) + timedelta(minutes=5)
     source.text("/calendar.ics", calendar(("soon", soon, "贝拉直播", "贝拉")))

@@ -18,11 +18,16 @@ LenBot 插件接口 1 的 A-SOUL 合集，插件名 `asoul`。包含两部分：
       "live_keywords": ["直播"]
     }
   },
-  "scenes": {"onebot:group:10001": {"plugins": ["asoul"]}}
+  "scenes": {
+    "onebot:group:10001": {"plugins": ["asoul"]},
+    "telegram:group:-1001234567890": {"plugins": ["asoul"]}
+  }
 }
 ```
 
 角色 `tools` 还需放行相应工具及 `tool_search`。
+
+Telegram 群里的 `/日程` 这类中文命令和全文「今日直播」，要在 BotFather 关闭 Bot 的隐私模式（`/setprivacy`）或把 Bot 设为管理员后才能收到。
 
 ### 从旧的两个独立插件迁移
 
