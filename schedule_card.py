@@ -1,6 +1,7 @@
-"""Schedule card: day groups and rows with time, status, category, members, title and a member sticker.
+"""Schedule card: day groups, then one tile per live with time, category, title, member chips and a sticker.
 
-Special follows use the brand accent (a vertical bar and a tinted row), as the panel marks a selected item.
+A tile carries a thin bar in its first member's color. Special follows tint the tile and use the
+highlight color for the bar and time, as the panel marks a selected item.
 """
 
 from __future__ import annotations
@@ -12,12 +13,14 @@ import random
 
 from PIL import Image, ImageDraw, ImageOps
 
-from .card_kit import (BRAND, BRAND_SOFT, Card, ERROR, ERROR_BG, Fonts, INK, LINE, MUTED, PAGE, PRIMARY, SUCCESS,
-                       SUCCESS_BG, SURFACE, TINTS, Style, draw_chip, draw_mark, draw_text, footer, measure, px, wrap)
+from .card_kit import (BRAND_SOFT, Card, ERROR, ERROR_BG, FILL, Fonts, IDLE, INK, MUTED, PRIMARY, SUBTLE, SUCCESS,
+                       SUCCESS_BG, TINTS, Style, draw_chip, draw_text, flow, footer, header, line_height, measure, px,
+                       wrap)
 
 # Members' official colors; others take a panel avatar tint chosen by name.
 MEMBER_COLORS = {"嘉然": "#e799b0", "贝拉": "#db7d74", "乃琳": "#576690", "向晚": "#9ac8e2", "珈乐": "#b8a6d9"}
 WEEKDAYS = "一二三四五六日"
+HIGHLIGHTS = {"pink": (PRIMARY, BRAND_SOFT), "red": (ERROR, ERROR_BG), "platinum": ("#8b713e", "#f6f1e4")}
 
 
 def shade(color: str, factor: float) -> str:
@@ -40,6 +43,10 @@ def member_style(name: str) -> tuple[str, str]:
     return text, background
 
 
+def member_color(name: str) -> str:
+    return MEMBER_COLORS.get(name) or member_style(name)[0]
+
+
 @dataclass
 class Entry:
     start: datetime
@@ -47,6 +54,7 @@ class Entry:
     category: str = ""
     members: list[str] = field(default_factory=list)
     highlight: bool = False
+    highlight_style: str = "pink"
     cancelled: bool = False
     live_now: bool = False
 
@@ -74,76 +82,100 @@ def render_schedule(title: str, subtitle: str, days: list[Day], fonts: Fonts, *,
         used.add(path)
         return Image.open(path)
 
-    def paint_header(canvas, x, y, width):
-        draw_mark(canvas, x, y, px(18))
-        draw_text(canvas, fonts, x + px(24), y + px(9), "A-SOUL 日程", Style(12.5, bold=True, color=MUTED), anchor="lm")
-        draw_text(canvas, fonts, x, y + px(30), title, Style(26, bold=True))
-        draw_text(canvas, fonts, x, y + px(68), subtitle, Style(13, color=MUTED))
+    header(card, "直播日历", title, subtitle)
+    previous_empty = False
+    for index, day in enumerate(days):
+        empty = not day.entries
 
-    card.add(px(86), paint_header, gap=0)
-
-    for day in days:
-        def paint_day(canvas, x, y, width, day=day):
-            right = draw_text(canvas, fonts, x, y + px(11), f"{day.day.month}月{day.day.day}日", Style(16, bold=True), anchor="lm")
-            right = draw_text(canvas, fonts, right + px(6), y + px(11), "周" + WEEKDAYS[day.day.weekday()],
-                              Style(13, color=MUTED), anchor="lm")
+        def paint_day(canvas, x, y, width, day=day, empty=empty):
+            date_style = Style(15, weight=700, color=SUBTLE if empty else INK)
+            right = draw_text(canvas, fonts, x, y + px(11), f"{day.day.month}月{day.day.day}日", date_style, anchor="lm")
+            right = draw_text(canvas, fonts, right + px(7), y + px(11), "周" + WEEKDAYS[day.day.weekday()],
+                              Style(13, color=SUBTLE if empty else MUTED), anchor="lm")
             if day.today:
                 draw_chip(canvas, fonts, right + px(8), y + px(1), "今天", PRIMARY, BRAND_SOFT)
-            ImageDraw.Draw(canvas).line((x, y + px(27), x + width, y + px(27)), fill=LINE, width=max(1, px(0.5)))
+            if empty:
+                draw_text(canvas, fonts, x + width, y + px(11), "无直播", Style(12.5, color=SUBTLE), anchor="rm")
 
-        card.add(px(28), paint_day, gap=20)
-        if not day.entries:
-            card.add(px(18), lambda canvas, x, y, w: draw_text(canvas, fonts, x, y, "暂无直播",
-                                                                Style(13.5, color=MUTED)), gap=10)
-            continue
-        for entry in day.entries:
-            row(card, entry, sticker(entry.members), compact)
+        # Runs of empty days stay close together; a day with lives opens a new section.
+        gap = 24 if index == 0 else 8 if empty and previous_empty else 20
+        card.add(px(22), paint_day, gap=gap)
+        for position, entry in enumerate(day.entries):
+            row(card, entry, sticker(entry.members), compact, first=position == 0)
+        previous_empty = empty
 
     footer(card, "日程", source)
     return card.render()
 
 
-def row(card: Card, entry: Entry, art: Image.Image | None, compact: bool) -> None:
+def row(card: Card, entry: Entry, art: Image.Image | None, compact: bool, *, first: bool = False) -> None:
     fonts = card.fonts
-    pad = px(10 if compact else 12)
-    time_style = Style(18 if not compact else 16.5, bold=True, color=MUTED if entry.cancelled else INK)
-    time_w = measure(fonts, "00:00", time_style) + px(14)
-    art_size = px(44 if compact else 58)
-    text_x = pad + time_w
-    text_w = card.inner - text_x - pad - (art_size + px(10) if art is not None else 0)
-    title_style = Style(14.5 if compact else 15, bold=True, color=MUTED if entry.cancelled else INK)
-    lines = wrap(fonts, entry.title, title_style, text_w, max_lines=1 if compact else 2)
-    step = px(22)
-    content = px(20) + px(7) + len(lines) * step
-    height = max(content, art_size if art is not None else 0) + 2 * pad
+    pad = px(14)
+    bar_x = px(10)
+    time_x = px(22)
+    art_size = px(60 if compact else 76)
+    time_style = Style(18 if compact else 20, weight=700)
+    text_x = time_x + measure(fonts, "00:00", time_style) + px(14)
+    text_w = card.inner - text_x - pad - (art_size + px(8) if art is not None else 0)
+
+    accent, background = HIGHLIGHTS.get(entry.highlight_style, HIGHLIGHTS["pink"])
+    if not entry.highlight:
+        background = FILL
+        accent = member_color(entry.members[0]) if entry.members else IDLE
+    if entry.cancelled:
+        accent = IDLE
+
+    title_style = Style(15 if compact else 16.5, weight=600, color=SUBTLE if entry.cancelled else INK)
+    title_step = line_height(title_style, 1.45)
+    lines = wrap(fonts, entry.title, title_style, text_w, max_lines=3)
+
+    status = []
+    if entry.live_now:
+        status.append(("直播中", SUCCESS, SUCCESS_BG))
+    if entry.cancelled:
+        status.append(("已取消", ERROR, ERROR_BG))
+    if entry.highlight:
+        status.append(("特别关注", accent, "#ffffff"))
+    status_pos, status_h = flow(fonts, status, text_w)
+    members = [(name, *member_style(name)) for name in entry.members]
+    member_pos, member_h = flow(fonts, members, text_w)
+
+    content_h = (status_h + px(8) if status else 0) + len(lines) * title_step + (px(8) + member_h if members else 0)
+    time_style = Style(time_style.size, weight=700, color=SUBTLE if entry.cancelled else
+                       PRIMARY if entry.highlight and entry.highlight_style == "pink" else
+                       accent if entry.highlight else INK)
+    time_h = px(22 + (20 if entry.category else 0))
+    height = max(content_h, art_size, time_h) + 2 * pad
 
     def paint(canvas, x, y, width):
         draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((x, y, x + width, y + height), radius=px(8), fill=BRAND_SOFT if entry.highlight else PAGE)
-        if entry.highlight:
-            draw.rounded_rectangle((x, y + px(10), x + px(3), y + height - px(10)), radius=px(2), fill=BRAND)
-        draw_text(canvas, fonts, x + pad + px(2), y + pad, f"{entry.start:%H:%M}", time_style)
-        cx, cy = x + text_x, y + pad
-        if entry.live_now:
-            cx = draw_chip(canvas, fonts, cx, cy, "直播中", SUCCESS, SUCCESS_BG, dot=SUCCESS) + px(5)
-        if entry.cancelled:
-            cx = draw_chip(canvas, fonts, cx, cy, "已取消", ERROR, ERROR_BG) + px(5)
-        if entry.highlight:
-            cx = draw_chip(canvas, fonts, cx, cy, "特别关注", SURFACE, PRIMARY) + px(5)
+        draw.rounded_rectangle((x, y, x + width, y + height), radius=px(10), fill=background)
+        draw.rounded_rectangle((x + bar_x, y + pad + px(2), x + bar_x + px(3), y + height - pad - px(2)),
+                               radius=px(1.5), fill=accent)
+        draw_text(canvas, fonts, x + time_x, y + pad + px(3), f"{entry.start:%H:%M}", time_style)
         if entry.category:
-            cx = draw_chip(canvas, fonts, cx, cy, entry.category, MUTED, SURFACE) + px(5)
-        for name in entry.members:
-            fg, bg = member_style(name)
-            cx = draw_chip(canvas, fonts, cx, cy, name, fg, bg) + px(5)
-        ty = cy + px(27)
+            draw_text(canvas, fonts, x + time_x, y + pad + px(28), entry.category[:4], Style(11.5, color=MUTED))
+
+        top = y + (height - content_h) // 2
+        for cx, cy, label, fg, bg in status_pos:
+            draw_chip(canvas, fonts, x + text_x + cx, top + cy, label, fg, bg,
+                      outline=fg if bg == "#ffffff" else None)
+        ty = top + (status_h + px(8) if status else 0)
         for text in lines:
-            right = draw_text(canvas, fonts, x + text_x, ty, text, title_style)
+            right = draw_text(canvas, fonts, x + text_x, ty + (title_step - px(title_style.size)) // 2, text, title_style)
             if entry.cancelled:
-                draw.line((x + text_x, ty + step // 2, right, ty + step // 2), fill=MUTED, width=px(1))
-            ty += step
+                mid = ty + title_step // 2
+                draw.line((x + text_x, mid, right, mid), fill=MUTED, width=px(1.5))
+            ty += title_step
+        ty += px(8)
+        for cx, cy, label, fg, bg in member_pos:
+            draw_chip(canvas, fonts, x + text_x + cx, ty + cy, label, fg, bg)
+
         if art is not None:
             picture = ImageOps.contain(art.convert("RGBA"), (art_size, art_size), Image.Resampling.LANCZOS)
+            if entry.cancelled:
+                picture.putalpha(picture.getchannel("A").point(lambda a: a * 45 // 100))
             canvas.alpha_composite(picture, (x + width - pad - art_size + (art_size - picture.width) // 2,
                                              y + (height - picture.height) // 2))
 
-    card.add(height, paint, gap=8)
+    card.add(height, paint, gap=12 if first else 8)

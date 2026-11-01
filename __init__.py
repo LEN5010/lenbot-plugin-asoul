@@ -4,9 +4,10 @@ from len_bot.plugin import Plugin, PluginContext
 
 from .schedule import CalendarFeature
 from .dynamics import DynamicsFeature
+from .commands import DynamicsCommands
 
 
-class Asoul(CalendarFeature, DynamicsFeature, Plugin):
+class Asoul(CalendarFeature, DynamicsFeature, DynamicsCommands, Plugin):
     def __init__(self, ctx: PluginContext) -> None:
         super().__init__(ctx)
         self._init_calendar(ctx)

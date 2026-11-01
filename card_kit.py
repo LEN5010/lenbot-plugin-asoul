@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import lru_cache
 from io import BytesIO
-import math
 from pathlib import Path
 from typing import Sequence
 import unicodedata
@@ -17,17 +16,20 @@ import unicodedata
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import regex
 
-# Panel palette (src/len_bot/web/frontend/src/styles/theme.js).
-BRAND = "#e799b0"
+# Panel palette (src/len_bot/web/frontend/src/styles/tokens.css).
+BRAND = "#e2809f"
 BRAND_SOFT = "#fbeff3"
 PRIMARY = "#b4476a"
 INK = "#1d1b20"
+INK_2 = "#3f3c44"
 MUTED = "#6b6870"
+SUBTLE = "#9b98a1"
 LINE = "#e9e9ec"
 PAGE = "#f7f7f8"
+FILL = "#f6f6f8"
 SURFACE = "#ffffff"
 TRACK = "#ededf0"
-HOVER = "#f2f2f4"
+IDLE = "#c8c6cc"
 SUCCESS, SUCCESS_BG = "#22875a", "#e6f4ec"
 ERROR, ERROR_BG = "#c4323f", "#fce9ea"
 TINTS = [("#f8e6ec", "#a8405f"), ("#eee8f6", "#6c4f96"), ("#f8ece0", "#93552a"),
@@ -36,13 +38,17 @@ TINTS = [("#f8e6ec", "#a8405f"), ("#eee8f6", "#6c4f96"), ("#f8ece0", "#93552a"),
 S = 2
 WIDTH = 540
 MARGIN = 14
-PAD = 22
-RADIUS = 12
+PAD = 24
+RADIUS = 16
 MAX_PNG_BYTES = 3_000_000
 
 
 def px(value: float) -> int:
     return round(value * S)
+
+
+def hairline() -> int:
+    return max(1, px(0.5))
 
 
 # ---------- fonts ----------
@@ -65,25 +71,25 @@ def has_glyph(font: ImageFont.FreeTypeFont, char: str) -> bool:
 
 @dataclass(frozen=True)
 class Fonts:
-    regular: Path
-    bold: Path
-    regular_index: int = 0
-    bold_index: int = 0
+    """A variable-weight main font followed by fallbacks for symbols it lacks."""
+    main: Path
     fallbacks: tuple[Path, ...] = ()
-    # A single-weight family draws bold as a thin same-color stroke.
-    fake_bold: bool = False
 
-    @lru_cache(maxsize=64)
-    def get(self, size: float, bold: bool = False) -> ImageFont.FreeTypeFont:
-        path, index = (self.bold, self.bold_index) if bold and not self.fake_bold else (self.regular, self.regular_index)
-        return ImageFont.truetype(str(path), px(size), index=index)
+    @lru_cache(maxsize=128)
+    def get(self, size: float, weight: int = 400) -> ImageFont.FreeTypeFont:
+        font = ImageFont.truetype(str(self.main), px(size))
+        try:
+            font.set_variation_by_axes([weight])
+        except OSError:
+            pass   # A static font keeps its only weight.
+        return font
 
-    @lru_cache(maxsize=64)
-    def chain(self, size: float, bold: bool = False) -> tuple[ImageFont.FreeTypeFont, ...]:
-        return (self.get(size, bold), *(ImageFont.truetype(str(path), px(size)) for path in self.fallbacks))
+    @lru_cache(maxsize=128)
+    def chain(self, size: float, weight: int = 400) -> tuple[ImageFont.FreeTypeFont, ...]:
+        return (self.get(size, weight), *(ImageFont.truetype(str(path), px(size)) for path in self.fallbacks))
 
-    def pick(self, cluster: str, size: float, bold: bool = False) -> ImageFont.FreeTypeFont:
-        chain = self.chain(size, bold)
+    def pick(self, cluster: str, size: float, weight: int = 400) -> ImageFont.FreeTypeFont:
+        chain = self.chain(size, weight)
         base = next((c for c in cluster if not unicodedata.combining(c) and c not in "︎️‍"), cluster[:1])
         return next((font for font in chain if has_glyph(font, base)), chain[0])
 
@@ -97,16 +103,17 @@ class Style:
     size: float
     bold: bool = False
     color: str = INK
+    weight: int = 0
 
-
-def stroke(fonts: Fonts, style: Style) -> int:
-    return max(1, round(style.size * S * 0.035)) if style.bold and fonts.fake_bold else 0
+    @property
+    def wght(self) -> int:
+        return self.weight or (700 if self.bold else 400)
 
 
 def segments(fonts: Fonts, text: str, style: Style) -> list[tuple[str, ImageFont.FreeTypeFont]]:
     out: list[tuple[str, ImageFont.FreeTypeFont]] = []
     for cluster in clusters(text):
-        font = fonts.pick(cluster, style.size, style.bold)
+        font = fonts.pick(cluster, style.size, style.wght)
         if out and out[-1][1] is font:
             out[-1] = (out[-1][0] + cluster, font)
         else:
@@ -120,19 +127,28 @@ def measure(fonts: Fonts, text: str, style: Style) -> int:
 
 def draw_text(canvas: Image.Image, fonts: Fonts, x: float, y: float, text: str, style: Style,
               anchor: str = "lt", color: str | None = None) -> int:
-    """Draw one line; anchor is horizontal l/m/r plus vertical t/m. Returns the right edge."""
-    primary = fonts.get(style.size, style.bold)
-    ascent, descent = primary.getmetrics()
+    """Draw one line; anchor is horizontal l/m/r plus vertical t/m. Returns the right edge.
+
+    Vertical placement uses the cap height of the main font, so "t" puts the top of the
+    glyphs at y and "m" centres them on y, independent of the font's line gap.
+    """
+    primary = fonts.get(style.size, style.wght)
+    cap = cap_height(primary)
     width = measure(fonts, text, style)
     left = x - width if anchor[0] == "r" else x - width / 2 if anchor[0] == "m" else x
-    baseline = y + ascent if anchor[1] == "t" else y + (ascent - descent) / 2
+    baseline = y + cap if anchor[1] == "t" else y + cap / 2
     draw = ImageDraw.Draw(canvas)
     cursor = left
     for part, font in segments(fonts, text, style):
-        draw.text((cursor, baseline), part, font=font, fill=color or style.color, anchor="ls",
-                  stroke_width=stroke(fonts, style), stroke_fill=color or style.color)
+        draw.text((cursor, baseline), part, font=font, fill=color or style.color, anchor="ls")
         cursor += font.getlength(part)
     return round(left + width)
+
+
+@lru_cache(maxsize=128)
+def cap_height(font: ImageFont.FreeTypeFont) -> int:
+    # Top of a CJK ideograph above the baseline; Latin capitals sit slightly lower.
+    return -font.getbbox("国", anchor="ls")[1]
 
 
 def wrap(fonts: Fonts, text: str, style: Style, width: int, max_lines: int | None = None) -> list[str]:
@@ -172,7 +188,7 @@ def layout(fonts: Fonts, runs: Sequence[Run], style: Style, width: int) -> list[
                 if cluster in ("\n", "\r\n"):
                     units.append(("break", None, 0, None))
                 else:
-                    font = fonts.pick(cluster, style.size, style.bold)
+                    font = fonts.pick(cluster, style.size, style.wght)
                     units.append(("text", cluster, font.getlength(cluster), font))
         for unit in units:
             if unit[0] == "break":
@@ -198,12 +214,12 @@ def line_height(style: Style, ratio: float = 1.7) -> int:
 def draw_lines(canvas: Image.Image, fonts: Fonts, lines, x: int, y: int, style: Style, ratio: float = 1.7,
                color: str | None = None, strike: bool = False) -> int:
     height = line_height(style, ratio)
-    ascent, descent = fonts.get(style.size, style.bold).getmetrics()
+    cap = cap_height(fonts.get(style.size, style.wght))
     icon = emoji_size(style)
     draw = ImageDraw.Draw(canvas)
     fill = color or style.color
     for line in lines:
-        baseline = y + (height + ascent - descent) // 2
+        baseline = y + (height + cap) // 2
         cursor = x
         index = 0
         while index < len(line):
@@ -219,8 +235,7 @@ def draw_lines(canvas: Image.Image, fonts: Fonts, lines, x: int, y: int, style: 
                 text += line[index][1]
                 cursor += line[index][2]
                 index += 1
-            draw.text((start, baseline), text, font=font, fill=fill, anchor="ls",
-                      stroke_width=stroke(fonts, style), stroke_fill=fill)
+            draw.text((start, baseline), text, font=font, fill=fill, anchor="ls")
         if strike:
             mid = y + height // 2
             draw.line((x, mid, cursor, mid), fill=fill, width=px(1))
@@ -243,41 +258,76 @@ def cover(image: Image.Image, width: int, height: int) -> Image.Image:
     return ImageOps.fit(ImageOps.exif_transpose(image).convert("RGB"), (width, height), Image.Resampling.LANCZOS)
 
 
+def flatten(image: Image.Image) -> Image.Image:
+    """Transparent pictures sit on the card surface instead of turning black."""
+    surface = Image.new("RGBA", image.size, SURFACE)
+    surface.alpha_composite(image.convert("RGBA"))
+    return surface.convert("RGB")
+
+
 def circle(image: Image.Image, size: int) -> Image.Image:
-    image = cover(image, size, size)
+    image = cover(flatten(image), size, size)
     mask = Image.new("L", (size * 4, size * 4), 0)
     ImageDraw.Draw(mask).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     out.paste(image, (0, 0), mask.resize((size, size), Image.Resampling.LANCZOS))
     ring = ImageDraw.Draw(out)
-    ring.ellipse((0, 0, size - 1, size - 1), outline=LINE, width=max(1, px(0.5)))
+    ring.ellipse((0, 0, size - 1, size - 1), outline=LINE, width=hairline())
     return out
 
 
+# lenbot-mark.svg in its viewBox "8 4 80 80": a speech bubble with a curl on top, two eyes and a smile.
+# Segments are Bézier control points; a straight edge is a two-point segment.
+_MARK_CURL = (((47, 27), (44, 18), (47, 11), (55, 9)), ((55, 9), (61, 8), (64, 13), (60, 16)),
+              ((60, 16), (57, 17.5), (55.5, 14.5), (58.5, 12.5)))
+_MARK_BUBBLE = (((48, 26), (67, 26), (79, 37), (79, 51)), ((79, 51), (79, 65), (67, 76), (48, 76)),
+                ((48, 76), (44.5, 76), (41, 75.5), (38, 74.6)), ((38, 74.6), (22, 81)), ((22, 81), (26, 69)),
+                ((26, 69), (20, 64.5), (17, 58), (17, 51)), ((17, 51), (17, 37), (29, 26), (48, 26)))
+_MARK_SMILE = (((42.5, 62), (45.25, 65), (48, 62)), ((48, 62), (50.75, 65), (53.5, 62)))
+_MARK_EYES = ((35, 43), (54, 43))
+_MARK_FACE = "#2a2530"
+
+
+def _bezier(segments, steps: int = 24) -> list[tuple[float, float]]:
+    points: list[tuple[float, float]] = []
+    for control in segments:
+        for i in range(0 if not points else 1, steps + 1):
+            t = i / steps
+            level = list(control)
+            while len(level) > 1:   # de Casteljau
+                level = [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t) for a, b in zip(level, level[1:])]
+            points.append(level[0])
+    return points
+
+
 def draw_mark(canvas: Image.Image, x: int, y: int, size: int, color: str = BRAND) -> None:
-    """The LenBot signal mark (lenbot-mark.svg): a dot, an inner arc to the upper right, an outer arc to the lower left."""
+    """The LenBot mark (lenbot-mark.svg), drawn supersampled and scaled down to size x size."""
     scale = 6
     layer = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
-    unit = size * scale / 96
-    stroke = max(1, round(7 * unit))
-    centre = 48 * unit
-    # SVG arcs: radius 20 from the top (-110°) clockwise to the right (0°); radius 34 from 70° clockwise to the left (180°).
-    for radius, start, end in ((20, -110, 0), (34, 70, 180)):
-        r = radius * unit
-        outer = r + stroke / 2   # Pillow strokes inward from the box; the SVG radius is the stroke centre.
-        d.arc((centre - outer, centre - outer, centre + outer, centre + outer), start, end, fill=color, width=stroke)
-        for angle in (start, end):
-            cx = centre + r * math.cos(math.radians(angle))
-            cy = centre + r * math.sin(math.radians(angle))
-            d.ellipse((cx - stroke / 2, cy - stroke / 2, cx + stroke / 2, cy + stroke / 2), fill=color)
-    d.ellipse((centre - 8 * unit, centre - 8 * unit, centre + 8 * unit, centre + 8 * unit), fill=color)
+    unit = size * scale / 80
+    at = lambda p: ((p[0] - 8) * unit, (p[1] - 4) * unit)
+
+    def stroke(segments, width: float, fill: str) -> None:
+        points = [at(p) for p in _bezier(segments)]
+        w = max(1, round(width * unit))
+        d.line(points, fill=fill, width=w, joint="curve")
+        for px_, py_ in (points[0], points[-1]):
+            d.ellipse((px_ - w / 2, py_ - w / 2, px_ + w / 2, py_ + w / 2), fill=fill)
+
+    stroke(_MARK_CURL, 5, color)
+    d.polygon([at(p) for p in _bezier(_MARK_BUBBLE)], fill=color)
+    for ex, ey in _MARK_EYES:
+        left, top = at((ex, ey))
+        d.rounded_rectangle((left, top, left + 7 * unit, top + 14 * unit), radius=3.5 * unit, fill=_MARK_FACE)
+    stroke(_MARK_SMILE, 3, _MARK_FACE)
     canvas.alpha_composite(layer.resize((size, size), Image.Resampling.LANCZOS), (x, y))
 
 
 # ---------- small pieces ----------
 
-CHIP = Style(11.5, bold=True)
+CHIP = Style(11, weight=600)
+CHIP_HEIGHT = 20
 
 
 def chip_width(fonts: Fonts, text: str, style: Style = CHIP, pad_x: float = 7, dot: bool = False) -> int:
@@ -285,10 +335,12 @@ def chip_width(fonts: Fonts, text: str, style: Style = CHIP, pad_x: float = 7, d
 
 
 def draw_chip(canvas: Image.Image, fonts: Fonts, x: int, y: int, text: str, fg: str, bg: str, *,
-              style: Style = CHIP, pad_x: float = 7, height: float = 20, dot: str | None = None) -> int:
+              style: Style = CHIP, pad_x: float = 7, height: float = CHIP_HEIGHT, dot: str | None = None,
+              outline: str | None = None) -> int:
     w = chip_width(fonts, text, style, pad_x, bool(dot))
     h = px(height)
-    ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w, y + h), radius=px(6), fill=bg)
+    ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w, y + h), radius=px(6), fill=bg,
+                                             outline=outline, width=hairline() if outline else 0)
     tx = x + px(pad_x)
     if dot:
         r = px(3)
@@ -296,6 +348,19 @@ def draw_chip(canvas: Image.Image, fonts: Fonts, x: int, y: int, text: str, fg: 
         tx += px(10)
     draw_text(canvas, fonts, tx, y + h / 2, text, style, anchor="lm", color=fg)
     return x + w
+
+
+def flow(fonts: Fonts, chips: Sequence[tuple[str, str, str]], width: int, gap: float = 5,
+         row_gap: float = 6) -> tuple[list[tuple[int, int, str, str, str]], int]:
+    """Place (label, fg, bg) chips left to right, wrapping at width. Returns positions and total height."""
+    positions, cx, cy = [], 0, 0
+    for label, fg, bg in chips:
+        w = chip_width(fonts, label)
+        if cx and cx + w > width:
+            cx, cy = 0, cy + px(CHIP_HEIGHT + row_gap)
+        positions.append((cx, cy, label, fg, bg))
+        cx += w + px(gap)
+    return positions, (cy + px(CHIP_HEIGHT) if chips else 0)
 
 
 def compact(number: int | None) -> str:
@@ -327,7 +392,7 @@ class Card:
         canvas = Image.new("RGBA", (px(WIDTH), height), PAGE)
         ImageDraw.Draw(canvas).rounded_rectangle(
             (px(MARGIN), px(MARGIN), px(WIDTH - MARGIN) - 1, height - px(MARGIN) - 1),
-            radius=px(RADIUS), fill=SURFACE, outline=LINE, width=max(1, px(0.5)))
+            radius=px(RADIUS), fill=SURFACE, outline=LINE, width=hairline())
         x, y = px(MARGIN + PAD), px(MARGIN + PAD)
         for index, (h, paint, gap) in enumerate(self.blocks):
             if index:
@@ -345,22 +410,49 @@ class Card:
         return buffer.getvalue()
 
 
-def footer(card: Card, label: str, source: str) -> None:
+def header(card: Card, kind: str, title: str, subtitle: str) -> None:
+    """Brand row (mark, A-SOUL, card kind), the title, and a muted subtitle."""
     fonts = card.fonts
-    small = Style(11.5, color=MUTED)
-    brand = Style(11.5, bold=True)
 
     def paint(canvas, x, y, width):
-        ImageDraw.Draw(canvas).line((x, y, x + width, y), fill=LINE, width=max(1, px(0.5)))
-        mid = y + px(17)
-        draw_mark(canvas, x, mid - px(8), px(16))
-        cursor = draw_text(canvas, fonts, x + px(21), mid, "LenBot", brand, anchor="lm")
-        if label:
-            draw_text(canvas, fonts, cursor + px(6), mid, label, small, anchor="lm")
-        if source:
-            text = source
-            while measure(fonts, text, small) > width * 0.6 and len(text) > 4:
-                text = text[:-2] + "…"
-            draw_text(canvas, fonts, x + width, mid, text, small, anchor="rm")
+        draw_mark(canvas, x, y - px(1), px(20))
+        right = draw_text(canvas, fonts, x + px(24), y + px(9), "A-SOUL", Style(12.5, weight=700, color=PRIMARY),
+                          anchor="lm")
+        ImageDraw.Draw(canvas).ellipse((right + px(7), y + px(8), right + px(10), y + px(11)), fill=IDLE)
+        draw_text(canvas, fonts, right + px(16), y + px(9), kind, Style(12.5, color=MUTED), anchor="lm")
+        draw_text(canvas, fonts, x, y + px(36), title, Style(25, weight=700))
+        if subtitle:
+            draw_text(canvas, fonts, x, y + px(73), subtitle, Style(13, color=MUTED))
 
-    card.add(px(28), paint, gap=18)
+    card.add(px(86 if subtitle else 62), paint, gap=0)
+
+
+def footer(card: Card, label: str, source: str, qr: Image.Image | None = None, qr_caption: str = "") -> None:
+    """One closing row: the LenBot mark and label on the left, the source (or a QR code) on the right."""
+    fonts = card.fonts
+    small = Style(11.5, color=SUBTLE)
+    qr_size = px(64)
+    height = px(32) if qr is None else qr_size + px(16)
+
+    def paint(canvas, x, y, width):
+        ImageDraw.Draw(canvas).line((x, y, x + width, y), fill=LINE, width=hairline())
+        mid = y + px(20)
+        draw_mark(canvas, x, mid - px(8), px(16))
+        cursor = draw_text(canvas, fonts, x + px(21), mid, "LenBot", Style(11.5, weight=700, color=INK_2), anchor="lm")
+        if label:
+            draw_text(canvas, fonts, cursor + px(6), mid, label, Style(11.5, color=MUTED), anchor="lm")
+        text = source
+        limit = width * (0.45 if qr is not None else 0.6)
+        while text and measure(fonts, text, small) > limit and len(text) > 4:
+            text = text[:-2] + "…"
+        if qr is None:
+            if text:
+                draw_text(canvas, fonts, x + width, mid, text, small, anchor="rm")
+            return
+        draw_text(canvas, fonts, x, mid + px(22), text, small)
+        left = x + width - qr_size
+        canvas.paste(qr.resize((qr_size, qr_size), Image.Resampling.NEAREST), (left, y + px(14)))
+        if qr_caption:
+            draw_text(canvas, fonts, left - px(10), y + px(14) + qr_size // 2, qr_caption, small, anchor="rm")
+
+    card.add(height, paint, gap=20)

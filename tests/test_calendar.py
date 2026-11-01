@@ -51,7 +51,7 @@ async def test_schedule_command_and_tool_read_the_calendar(source):
         assert bot.deliveries[-1].text.startswith("今天直播安排：")
         assert "嘉然直播（嘉然）" in bot.deliveries[-1].text and "乃琳" not in bot.deliveries[-1].text
         assert await bot.message("/日程 下周")
-        assert bot.deliveries[-1].text == "用法：/日程、/日程 明天、/日程 本周"
+        assert bot.deliveries[-1].text == "用法：/日程、/日程 明天、/日程 本周，可加 -a"
         found = json.loads(await bot.tool("live_schedule", {"start": tomorrow.date().isoformat(), "member": "乃琳"}))
         assert [event["uid"] for event in found["events"]] == ["b"]
 
@@ -62,7 +62,7 @@ async def test_schedule_command_answers_in_a_telegram_group(source):
     source.text("/calendar.ics", calendar(("a", today, "嘉然直播", "嘉然")))
     scene = "telegram:group:-1001234"
     async with PluginTest(PACKAGE, config=config(source, remind_minutes=0, card_mode="text"),
-                          scenes=(scene,), bots={"telegram": "telegram:7001"}) as bot:
+                          scenes=(scene,)) as bot:
         assert await bot.message("/日程", scene=scene, sender="telegram:501")
         assert bot.deliveries[-1].scene == scene and "嘉然直播（嘉然）" in bot.deliveries[-1].text
 
@@ -95,14 +95,14 @@ async def test_schedule_card_shows_cancelled_and_special_follow(source):
         ("a", today + timedelta(hours=1), "【日常】嘉然直播: 早安", "嘉然"),
         ("b", today + timedelta(hours=3), "【日常】贝拉直播: 跳舞", "贝拉"),
         ("c", today + timedelta(hours=5), "【2D】思诺直播: 唱歌", "思诺", "CANCELLED")))
-    async with PluginTest(PACKAGE, config=config(source, remind_minutes=0)) as bot:
+    async with PluginTest(PACKAGE, config=config(source, remind_minutes=0), owners=["onebot:70001"]) as bot:
         assert await bot.message("/日程高亮 今天")
         listing = bot.deliveries[-1].text
         assert "1. " in listing and "2. " in listing and "思诺" not in listing
         assert await bot.message("/日程高亮 今天 2")
         assert bot.deliveries[-1].text.startswith("已设为特别关注：") and "贝拉" in bot.deliveries[-1].text
         assert await bot.message("/日程高亮列表")
-        assert "贝拉直播" in bot.deliveries[-1].text
+        assert "跳舞" in bot.deliveries[-1].text and "贝拉" in bot.deliveries[-1].text
         assert await bot.message("/日程")
         card, = bot.deliveries[-1].parts
         assert isinstance(card, Image) and PILImage.open(BytesIO(card.data)).size[0] == 1080
@@ -114,3 +114,13 @@ async def test_schedule_card_shows_cancelled_and_special_follow(source):
         assert bot.deliveries[-1].text == "这场本来就不是特别关注。"
         assert await bot.message("/日程高亮 下个月")
         assert bot.deliveries[-1].text.startswith("用法：/日程高亮 日期 序号")
+
+
+@pytest.mark.asyncio
+async def test_cancelled_only_day_keeps_its_schedule_card(source):
+    today = datetime.now(ZONE).replace(hour=12, minute=0, second=0, microsecond=0)
+    source.text('/calendar.ics', calendar(('cancelled', today, '嘉然直播', '嘉然', 'CANCELLED')))
+    async with PluginTest(PACKAGE, config=config(source, remind_minutes=0)) as bot:
+        await bot.message('/日程')
+        card, = bot.deliveries[-1].parts
+        assert isinstance(card, Image) and '已取消' in card.description

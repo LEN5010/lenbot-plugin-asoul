@@ -1,28 +1,30 @@
 {
   "name": "asoul",
   "title": "A-SOUL 日程与动态",
-  "description": "A-SOUL 合集：读取 ICS 日历，/日程 发日程卡片、/日程高亮 标记特别关注、live_schedule 工具按日期查询、开播前发场景事件；动态站成员/动态/历史同日/二创查询，并通过本群出口发送正文卡片和来源原图。",
+  "description": "A-SOUL 日程、全局多色特别关注、历史上的今天、随机二创和动态站搜索，支持聊天命令、主 Agent 工具与主题图文卡片。",
   "authors": [
     "LEN5010"
   ],
   "license": "AGPL-3.0-or-later",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "interface": 1,
   "requires_lenbot": ">=0.2,<1",
   "category": "内容查询",
   "capabilities": [
-    "日历",
-    "动态与二创",
-    "卡片发送"
+    "日程与特别关注",
+    "历史同日与二创",
+    "昵称和分类筛选",
+    "主 Agent 工具",
+    "主题卡片"
   ],
   "usage": [
     "配置后选择启用的群；模型工具需要当前角色许可。",
     "参数、共享指南与实际发送语义可在群聊工具页预览。",
     "最低宿主基线和来源参数变更见 CHANGELOG.md。",
-    "旧成员／最近／搜索／详情／往年今日工具统一为 asoul_dynamics；旧二创搜索／随机工具统一为 asoul_fanart；两个发送工具统一为 asoul_send_card。live_schedule 保留。角色 tools 若为明确名称列表，需要改成这四个新名称并保留 tool_search；all 无需更改。"
+    "主 Agent 工具为 live_schedule、asoul_dynamics、asoul_fanart、asoul_send_card、asoul_schedule_highlight，角色 tools 同时保留 tool_search。主播评论、动态和直播监控由 bilibili 插件提供。"
   ],
   "install": "git",
-  "repository": "https://github.com/lendevs/lenbot-plugin-asoul",
+  "repository": "https://github.com/LEN5010/lenbot-plugin-asoul",
   "ref": "main",
   "permissions": [
     "send",

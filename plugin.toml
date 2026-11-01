@@ -1,5 +1,5 @@
 name = "asoul"
-version = "1.2.2"
+version = "1.3.0"
 interface = 1
 permissions = ["send", "events"]
 requires_lenbot = ">=0.2,<1"
@@ -8,8 +8,9 @@ platforms = ["linux", "darwin"]
 reload = "plugin"
 authors = ["LEN5010"]
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/lendevs/lenbot-plugin-asoul"
-description = "A-SOUL 合集：读取 ICS 日历，/日程 发日程卡片、/日程高亮 标记特别关注、live_schedule 工具按日期查询、开播前发场景事件；动态站成员/动态/历史同日/二创查询，并通过本群出口发送正文卡片和来源原图。"
+repository = "https://github.com/LEN5010/lenbot-plugin-asoul"
+dependencies = ["qrcode>=8.2,<9"]
+description = "A-SOUL 日程、全局多色特别关注、历史上的今天、随机二创和动态站搜索，支持聊天命令、主 Agent 工具与主题图文卡片。"
 
 [model]
 instructions = "prompts/tools.md"
@@ -42,14 +43,14 @@ description = "图片是日程卡片，文字是逐行列表。"
 label = "算作直播的关键词"
 group = "日程"
 type = "string_list"
-default = []
+default = ["2d", "birthday live", "live", "sing", "开播", "杂谈", "歌会", "歌杂", "游戏", "演唱会", "电台", "直播", "突击", "线下", "综艺", "联动", "节目"]
 description = "标题、分类或地点含这些词的条目算直播。"
 
 [config.non_live_keywords]
 label = "不算直播的关键词"
 group = "日程"
 type = "string_list"
-default = []
+default = ["周年", "周边", "投稿", "生日", "纪念", "翻唱发布", "首发"]
 description = "不含直播关键词且含这些词的条目不算直播。"
 
 [config.include_all_day]
@@ -70,7 +71,7 @@ description = "日历里不带时区的时间按这个时区解释。"
 label = "日历缓存时间（秒）"
 group = "日程"
 type = "number"
-default = 300
+default = 1800
 description = "成功读取后多少秒内复用同一份日历，不重复请求。"
 
 [config.calendar_user_agent]
@@ -101,3 +102,36 @@ group = "高级"
 type = "number"
 default = 15
 description = "读取日历或动态站的单次 HTTP 超时秒数。"
+
+[config.on_this_day_default_limit]
+label = "往年今日默认条数"
+group = "动态"
+type = "integer"
+default = 3
+minimum = 1
+maximum = 20
+description = "历史上的今天命令默认返回的动态条数。"
+
+[config.default_search_limit]
+label = "搜索默认条数"
+group = "动态"
+type = "integer"
+default = 5
+minimum = 1
+maximum = 20
+description = "搜动态与二创搜索命令每次返回的条数。"
+
+[config.on_this_day_cache_minutes]
+label = "往年今日缓存（分钟）"
+group = "动态"
+type = "integer"
+default = 30
+minimum = 0
+description = "历史上的今天查询缓存时长。"
+
+[config.render_cards]
+label = "动态查询输出卡片"
+group = "动态"
+type = "boolean"
+default = true
+description = "开启时发送图文卡片，关闭时发送正文与原文链接。"

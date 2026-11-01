@@ -1,96 +1,104 @@
-# lenbot-plugin-asoul
+# A-SOUL 日程与动态
 
-LenBot 插件接口 1 的 A-SOUL 合集，插件名 `asoul`。包含两部分：
-
-- **日程**：读取一个 ICS 日历（默认枝江站 `https://asoul.love/calendar.ics`），`/日程` 命令和「今日直播」全文直接发日程卡片，可以把某场设为特别关注，`live_schedule` 工具按日期查询，开播前向启用的群发场景事件。
-- **动态**：访问 A-SOUL 动态查询站（默认 `https://len5010.top/dynamics/api`）的公开接口，查询成员、动态、历史同日和二创，并能把正文卡片和来源原图发到本群。
+LenBot 插件接口 1，插件名 `asoul`。迁移自 LEN5010 的 [枝江自动推送](https://github.com/LEN5010/astrbot_plugin_asoul)中 A-SOUL 日程部分，以及[动态查询站插件](https://github.com/LEN5010/astrbot_plugin_dynamic_asoul)。日程、历史动态和二创在本插件中提供；主播评论与回复、动态、视频和直播状态监控由 `bilibili` 插件提供。
 
 ## 安装
 
-在 LenBot 面板「插件」填写本仓库的 Git 地址，或导入发布页的 ZIP，应用后配置参数并选择启用的群。也可以把仓库目录直接放进实例的 `plugins/`。
-
-根配置的局部示例（不要覆盖完整根配置）：
+在面板「插件」填写 `https://github.com/LEN5010/lenbot-plugin-asoul`，或导入发布 ZIP，应用后选择启用的群。
 
 ```json
 {
-  "plugins": {
-    "asoul": {
-      "live_keywords": ["直播"]
-    }
-  },
-  "scenes": {
-    "onebot:group:10001": {"plugins": ["asoul"]},
-    "telegram:group:-1001234567890": {"plugins": ["asoul"]}
-  }
+  "owners": ["onebot:70001"],
+  "plugins": {"asoul": {}},
+  "scenes": {"onebot:group:10001": {"plugins": ["asoul"]}}
 }
 ```
 
-角色 `tools` 还需放行相应工具及 `tool_search`。
+日历默认来自 `https://asoul.love/calendar.ics`，动态站默认来自 `https://len5010.top/dynamics/api`。
 
-Telegram 群里的 `/日程` 这类中文命令和全文「今日直播」，要在 BotFather 关闭 Bot 的隐私模式（`/setprivacy`）或把 Bot 设为管理员后才能收到。
+## 聊天命令
 
-### 从旧的两个独立插件迁移
-
-旧插件 `asoul_calendar` 与 `asoul_dynamics` 合并为 `asoul`，命令和工具名不变：
-
-| 旧字段 | 新字段 |
+| 命令 | 行为 |
 |---|---|
-| `asoul_calendar.source_url` | `calendar_url` |
-| `asoul_calendar.cache_seconds` | `calendar_cache_seconds` |
-| `asoul_calendar.user_agent` | `calendar_user_agent` |
-| `asoul_dynamics.api_base_url` | `dynamics_api_url` |
-| `asoul_dynamics.cache_seconds` | `dynamics_cache_seconds` |
-| 两者的 `request_timeout_seconds` | 共用同名字段 |
-| 两者的 `card_font` | 删除，卡片改用随插件分发的字体 |
+| `今日直播`、`明日直播`、`本周直播` | 发送当天、明天或本周剩余日程；支持 `/` 前缀 |
+| `今日直播 -a`、`明日直播 -a`、`本周直播 -a` | 筛除心宜和思诺，联合节目保留其余成员 |
+| `/日程`、`/日程 明天`、`/日程 本周` | 日程快捷命令，同样支持 `-a` |
+| `/日程高亮 日期` | 主人列出当天节目序号 |
+| `/日程高亮 日期 序号 [粉色\|红色\|白金色]` | 主人标记全局特别关注，默认白金色 |
+| `/取消日程高亮 日期 序号` | 主人取消节目高亮 |
+| `/日程高亮列表` | 主人列出全部保存记录 |
+| `/取消日程高亮记录 序号` | 主人删除列表中的记录，适用于已从日历消失的节目 |
+| `/历史上的今天 [MM-DD] [条数]`、`/那年今日 ...` | 默认 3 条往年同日动态；日期支持 `8-16`、`8/16`、`8月16日` |
+| `历史上的今天`、`那年今日` | 纯文本触发今日历史动态卡片 |
+| `/随机二创 [角色] [分类/类型]`、`/二创 ...` | 随机发送一条二创卡片 |
+| `/随机图片二创 [角色]`、`/随机视频二创 [角色]` | 固定图片或视频类型 |
+| `/二创搜索 关键词 [角色]`、`/搜二创 ...` | 搜索二创与物料 |
+| `/搜动态 关键词 [成员] [排序]`、`/动态搜索 ...` | 搜索历史动态，排序支持 newest、oldest、likes、comments |
 
-其余日程字段（`calendar_timezone`、`live_keywords`、`non_live_keywords`、`include_all_day`、`remind_minutes`、`card_mode`）名称不变。场景 `plugins` 列表里的旧名字换成 `asoul`。旧数据目录里只有 `asoul_calendar/reminded.json` 需要移到新插件数据目录 `asoul/`，不移也只会在重启后对即将开始的条目重新提醒一次。
+常用昵称包括然然、拉姐、队长、奶琳、晚晚及 Diana、Bella、Eileen 等。二创角色支持嘉然、贝拉、乃琳、心宜&思诺；分类支持普通、物料、手书、动画、剪辑、AMV、MMD、3D 等上游别名。
 
-## 日程
+日程按上游规则合并同时间、同内容节目；A-SOUL 团体展开为嘉然、乃琳、贝拉。本周从今天显示至周日；周日查询明日返回「还没有下周的直播排表哦」。聊天命令使用 `calendar_timezone`，默认北京时间。高亮全局保存，由 LenBot `owners` 管理，对应原插件的管理员操作；已有高亮记录继续可读。
 
-- `/日程`、`/日程 明天`、`/日程 本周`，以及全文「今日直播」：插件直接回复，不叫醒大脑。`card_mode=image`（默认）发日程卡片，`text` 发逐行列表。
-- 卡片按天分组，每场显示时间、分类、成员和标题，配一张对应成员的表情；正在播的标「直播中」，取消的场次划掉保留。本周卡片用紧凑排版。
-- 特别关注：`/日程高亮 日期` 列出当天各场的序号，`/日程高亮 日期 序号` 标记，`/取消日程高亮 日期 序号` 取消，`/日程高亮列表` 查看还没过去的。日期写 `今天`、`明天`、`后天`、`10-07` 或 `2026-10-07`。标记的场次在卡片上用品牌色高亮，记录按日历条目的 UID 存在插件 KV，开播一周后自动清掉。
-- 低频工具 `live_schedule(start, days, member)`：大脑经 `tool_search` 发现后按日期查询，`member` 按日历原文包含的文字筛选，结果里带 `special_follow`。
-- 后台每分钟检查一次，开播前 `remind_minutes` 分钟向启用的群发一条场景事件，由大脑决定要不要提醒大家；特别关注的场次会在事件里说明。已提醒的条目记在插件数据目录的 `reminded.json`，重启不重复提醒。`remind_minutes=0` 关闭提醒。
+Telegram 使用中文命令和纯文本触发时，在 BotFather `/setprivacy` 关闭隐私模式或将机器人设为管理员。
 
-日历读取失败时回复「暂时没取到，稍后再试」，原始错误进面板的插件错误；当天没有条目时回复「暂无直播」。
+## 主 Agent 工具
 
-## 动态
+插件启用后，这五个工具由宿主注册，并带有简介、类型参数和共享指南。角色 `tools` 使用明确名单时，放行下列名称及 `tool_search`；使用 `all` 时按宿主统一发现。
 
-- `asoul_dynamics(request)`：action 为 members、search、read、history；最近动态用 search 并省略 query。member 可用源站 ID 或完整名称，按成员表精确匹配。nextCursor 原样续页。
-- `asoul_fanart(request)`：action 为 search 或 random。搜索支持分页、来源和分类；随机查询每次重新请求，没有分页游标。
-- `asoul_send_card(request)`：action 为 dynamic 或 fanart，各自要求来源 dynamicId／sourceDynamicId；include_images=false 只发正文与链接。
+| 工具 | 操作 |
+|---|---|
+| `live_schedule` | 按日期查询日历；`items` 给出合并后的日程及当天序号，`events` 保留原始条目 |
+| `asoul_dynamics` | request.action 为 members、search、read、history |
+| `asoul_fanart` | request.action 为 search、random，支持角色、类型、分类和来源 |
+| `asoul_send_card` | request.action 为 schedule、history、random_fanart、dynamic_search、fanart_search、dynamic、fanart |
+| `asoul_schedule_highlight` | 主人通过真实 `source_message_id` 执行 list、mark、unmark、remove |
 
-连同 `live_schedule` 共四项能力。每个操作的必填、可选字段由 requests.py 的类型分支说明；未知字段直接报错。查询与发送分开。
+示例业务参数：
 
-发卡片会重新查询源项，正文、转发原文、指标和媒体信息分页排版，长文完整保留。原图按来源顺序发送，保留 GIF，重复 URL 只发一次。全部内容准备好才开始发送；平台发送中途失败时停止，已确认的部分保留。返回的 `delivery` 是实际发送状态。
+```json
+{"request": {"action": "history", "month_day": "08-16", "limit": 3}}
+```
 
-HTTP 请求直接连接源站，每次只发一次。成功的查询页最多缓存 16 页，缓存过期后请求失败就报错；源站返回的 409（快照已变化）原文返回。
+```json
+{"request": {"action": "random_fanart", "character": "嘉然", "content_type": "video", "category": "剪辑·AMV"}}
+```
 
-## 字体与表情
+```json
+{"request": {"action": "schedule", "period": "week", "exclude_filtered_hosts": true}}
+```
 
-卡片字体用随插件分发的更纱黑体（Sarasa Mono SC），缺字的符号回退到系统里的 Arial Unicode、DejaVu Sans 或 Noto 字体。日程卡片的成员表情放在 `assets/stickers/<成员名>/`，按日历描述里的主播名挑选，同一张卡片里尽量不重复；没有表情的成员不配图。加新成员只需新建同名目录放 WebP 图片。
+查询工具返回数据与来源；发送工具通过当前群出口交付卡片，并返回实际 `delivery` 回执。`live_schedule` 的日期按当前群时区解释；高亮使用其 `items.date/index`。
 
-## 开发
+## 卡片与配置
 
-在与 LenBot 同级的目录里，用宿主的开发环境运行测试：
+卡片沿用 LenBot 的主题色：白色画布、灰阶文字、粉色品牌色。日程展示成员表情、节目类型、开播时间、特别关注与取消状态；动态和二创展示头像、正文、转发原文、封面/图片、内联 B 站表情、公开互动统计、原文链接和二维码。长文卡片自动分页，搜索卡片展示正文摘要。
+
+| 配置 | 默认值 | 用途 |
+|---|---|---|
+| `card_mode` | image | 日程图片或文字 |
+| `calendar_timezone` | Asia/Shanghai | 日历与聊天日期时区 |
+| `calendar_cache_seconds` | 1800 | 日历缓存秒数 |
+| `remind_minutes` | 10 | 开播前向场景发日历事件；0 关闭 |
+| `on_this_day_default_limit` | 3 | 历史同日默认条数 |
+| `default_search_limit` | 5 | 搜索命令默认条数 |
+| `on_this_day_cache_minutes` | 30 | 历史同日缓存分钟数 |
+| `render_cards` | true | 动态站命令图片或正文输出 |
+| `dynamics_cache_seconds` | 120 | 普通查询缓存；随机查询每次取样 |
+| `request_timeout_seconds` | 15 | 单次 HTTP 超时 |
+
+默认日历读取 ICS。高亮按节目身份保存在插件 KV；旧 UID 高亮继续匹配。开播前事件的已提醒条目保存在 `reminded.json`。
+
+## 开发与验证
+
+运行依赖 `qrcode>=8.2,<9`，Pillow、httpx、regex 使用宿主依赖。在与 LenBot 同级的目录内运行：
 
 ```sh
+uv pip install --python ../LenBot/.venv/bin/python 'qrcode>=8.2,<9'
 uv run --project ../LenBot --no-sync pytest -q
 ```
 
-测试用本地 HTTP 服务模拟日历和动态站。
+测试通过实际 `PluginTest` 匹配器、模型工具分派器、KV 和模拟发送出口，覆盖上游命令、昵称、筛选、高亮持久化、卡片与主 Agent 调用。`PluginTest.preview_tools()` 可查看工具参数、说明与可用性。
 
-许可证：GNU AGPL v3 或更新版本，见 [LICENSE](LICENSE)；来源说明见 [SOURCE.md](SOURCE.md)。查询和转发的内容版权归原作者。
+打包：`uv run --no-project --python 3.13 python ../LenBot/scripts/package_plugin.py . /tmp/asoul.zip`。新运行文件和素材加入 Git 后打包。
 
-## 工具接口
-
-工具采用接口 1 的显式简介、Field 参数说明与 `prompts/tools.md` 共享指南，返回原生 JSON 或文本。用 `PluginTest.preview_tools()` 查看模型说明、参数与可用性；测试里模型服务默认关闭。兼容和更新事项见 [CHANGELOG](CHANGELOG.md)。
-
-CI 调用 LenBot 的可复用工作流，跟随宿主 master 测试。catalog-entry.json 记录目录条目的安装来源。
-
-本机生成 ZIP（LenBot 仓库与本仓库放在同一目录下）：`uv run --no-project --python 3.13 python ../LenBot/scripts/package_plugin.py . /tmp/plugin.zip`。打包取 Git 已跟踪的运行源码和资源，新增文件需先加入 Git。
-
-## 宿主能力
-
-清单声明 `send`、`events`。这些权限约束宿主提供的能力，插件自行执行的 Python 与网络访问不受其约束。插件运行在宿主进程中，当前功能使用工具或后台协程，`isolation = "inline"`。
+来源与素材见 [SOURCE.md](SOURCE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。许可证为 GNU AGPL v3 或更新版本。
