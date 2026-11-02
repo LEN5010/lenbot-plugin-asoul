@@ -102,3 +102,7 @@ uv run --project ../LenBot --no-sync pytest -q
 打包：`uv run --no-project --python 3.13 python ../LenBot/scripts/package_plugin.py . /tmp/asoul.zip`。新运行文件和素材加入 Git 后打包。
 
 来源与素材见 [SOURCE.md](SOURCE.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。许可证为 GNU AGPL v3 或更新版本。
+
+## 在聊天中调整提醒
+
+需要 LenBot 0.2.1。主人可以让 Bot 提前五分钟提醒、关闭开播提醒，或查看当前设置。`asoul_schedule_settings` 使用 `action=get` 查询，`action=set, minutes=5` 保存，`minutes=0` 关闭。提醒时间供全部启用插件的群共用。角色工具名单加入 `asoul_schedule_settings` 并保留 `tool_search`。单场特别关注仍用 `asoul_schedule_highlight`，先由 `live_schedule` 取得日期和序号。

@@ -62,7 +62,8 @@ async def test_name_resolution_uses_actual_members_and_cursor_is_preserved(sourc
 async def test_action_schemas_do_not_accept_other_operations_parameters(source):
     async with PluginTest(PACKAGE, config=config(source)) as bot:
         preview = {item['name']: item for item in bot.preview_tools()}
-        assert set(preview) == {'live_schedule', 'asoul_dynamics', 'asoul_fanart', 'asoul_send_card','asoul_schedule_highlight'}
+        assert set(preview) == {'live_schedule', 'asoul_dynamics', 'asoul_fanart', 'asoul_send_card',
+                                'asoul_schedule_highlight', 'asoul_schedule_settings'}
         for name, request in [('asoul_dynamics', {'action': 'read'}),
                               ('asoul_dynamics', {'action': 'members', 'dynamic_id': '1'}),
                               ('asoul_fanart', {'action': 'random', 'cursor': 'not-allowed'}),
