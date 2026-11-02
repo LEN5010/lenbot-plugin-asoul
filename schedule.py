@@ -1,7 +1,7 @@
 """Calendar: live schedule from one ICS calendar, schedule card, special follows, schedule tool and pre-live scene events."""
 
 from __future__ import annotations
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import Field
 
 import asyncio
@@ -82,6 +82,22 @@ class CalendarFeature:
 
     async def _stop_calendar(self) -> None:
         await self.calendar_client.aclose()
+
+    @tool('asoul_schedule_settings', '主人查询或调整 A-SOUL 开播前提醒，所有启用插件的群共用。'
+          'action=get 查看当前设置；action=set 按 minutes 指定提前多少分钟提醒，0 表示关闭。'
+          '保存后立即生效。单场特别关注用 asoul_schedule_highlight。',
+          summary='由主人调整 A-SOUL 开播前提醒', needs_source=True)
+    async def schedule_settings(self, ctx: Invocation,
+                                action: Annotated[Literal['get', 'set'], Field(description='get 查询；set 保存提醒时间')],
+                                minutes: Annotated[int | None, Field(ge=0, description='提前提醒的分钟数；0 关闭')] = None) -> dict:
+        ctx.require_owner()
+        if action == 'set':
+            if minutes is None:
+                raise ValueError('调整提醒时需要指定 minutes；0 表示关闭')
+            await ctx.update_config({'remind_minutes': minutes})
+        elif minutes is not None:
+            raise ValueError('查询设置只需要 action=get')
+        return {'remind_minutes': self.ctx.config['remind_minutes'], 'scope': 'all_enabled_scenes'}
 
     async def events(self) -> tuple[CalendarEvent, ...]:
         async with self.calendar_lock:

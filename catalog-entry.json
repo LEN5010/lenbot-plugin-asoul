@@ -1,14 +1,14 @@
 {
   "name": "asoul",
   "title": "A-SOUL 日程与动态",
-  "description": "A-SOUL 日程、全局多色特别关注、历史上的今天、随机二创和动态站搜索，支持聊天命令、主 Agent 工具与主题图文卡片。",
+  "description": "查询 A-SOUL 直播日程、历史同日、动态和二创，发送图文卡片；主人可在聊天中标记特别关注、调整开播前提醒。",
   "authors": [
     "LEN5010"
   ],
   "license": "AGPL-3.0-or-later",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "interface": 1,
-  "requires_lenbot": ">=0.2,<1",
+  "requires_lenbot": ">=0.2.1,<1",
   "category": "内容查询",
   "capabilities": [
     "日程与特别关注",
@@ -18,16 +18,17 @@
     "主题卡片"
   ],
   "usage": [
-    "配置后选择启用的群；模型工具需要当前角色许可。",
-    "参数、共享指南与实际发送语义可在群聊工具页预览。",
-    "最低宿主基线和来源参数变更见 CHANGELOG.md。",
-    "主 Agent 工具为 live_schedule、asoul_dynamics、asoul_fanart、asoul_send_card、asoul_schedule_highlight，角色 tools 同时保留 tool_search。主播评论、动态和直播监控由 bilibili 插件提供。"
+    "需要 LenBot 0.2.1；安装后选择启用的群。",
+    "查询日程、动态、历史同日和二创，使用 asoul_send_card 发送图文卡片。",
+    "主人用 asoul_schedule_highlight 管理单场特别关注，asoul_schedule_settings 调整全局开播前提醒。",
+    "角色工具名单保留 live_schedule、asoul_dynamics、asoul_fanart、asoul_send_card、asoul_schedule_highlight、asoul_schedule_settings 和 tool_search。"
   ],
   "install": "git",
   "repository": "https://github.com/LEN5010/lenbot-plugin-asoul",
   "ref": "main",
   "permissions": [
     "send",
-    "events"
+    "events",
+    "configure"
   ]
 }

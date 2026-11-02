@@ -1,8 +1,8 @@
 name = "asoul"
-version = "1.3.0"
+version = "1.4.0"
 interface = 1
-permissions = ["send", "events"]
-requires_lenbot = ">=0.2,<1"
+permissions = ["send", "events", "configure"]
+requires_lenbot = ">=0.2.1,<1"
 requires_python = ">=3.13"
 platforms = ["linux", "darwin"]
 reload = "plugin"
@@ -10,7 +10,7 @@ authors = ["LEN5010"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/LEN5010/lenbot-plugin-asoul"
 dependencies = ["qrcode>=8.2,<9"]
-description = "A-SOUL 日程、全局多色特别关注、历史上的今天、随机二创和动态站搜索，支持聊天命令、主 Agent 工具与主题图文卡片。"
+description = "查询 A-SOUL 直播日程、历史同日、动态和二创，发送图文卡片；主人可在聊天中标记特别关注、调整开播前提醒。"
 
 [model]
 instructions = "prompts/tools.md"
