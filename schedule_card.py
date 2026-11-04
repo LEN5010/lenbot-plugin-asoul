@@ -1,7 +1,8 @@
-"""Schedule card: day groups, then one tile per live with time, category, title, member chips and a sticker.
+"""Schedule card in the shared card design: a title header, then one block per live.
 
-A tile carries a thin bar in its first member's color. Special follows tint the tile and use the
-highlight color for the bar and time, as the panel marks a selected item.
+The row keeps the original schedule's layout: a time tile, a category pill and hosts over the title,
+and stickers in a fixed slot at the right, one per host and smaller when several share the slot.
+Special follows use the original highlight palettes; cancelled lives go gray.
 """
 
 from __future__ import annotations
@@ -11,40 +12,34 @@ from datetime import date, datetime
 from pathlib import Path
 import random
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 
-from .card_kit import (BRAND_SOFT, Card, ERROR, ERROR_BG, FILL, Fonts, IDLE, INK, MUTED, PRIMARY, SUBTLE, SUCCESS,
-                       SUCCESS_BG, TINTS, Style, draw_chip, draw_text, flow, footer, header, line_height, measure, px,
-                       wrap)
+from .card_kit import (CHIP_HEIGHT, Card, Fonts, INK, INK_2, MUTED, PICTURE_FILL, PINK_LINE, PINK_PALE, PINK_TEXT,
+                       QUOTE_LINE, RADIUS, SURFACE, Style, divider, draw_chip, draw_text, fill, fit, line_height, px, ring,
+                       signature, title_header, wrap)
 
-# Members' official colors; others take a panel avatar tint chosen by name.
-MEMBER_COLORS = {"嘉然": "#e799b0", "贝拉": "#db7d74", "乃琳": "#576690", "向晚": "#9ac8e2", "珈乐": "#b8a6d9"}
+# Members' official colors, shown as the dot beside each name.
+MEMBER_COLORS = {"嘉然": "#e799b0", "贝拉": "#db7d74", "乃琳": "#576690", "向晚": "#9ac8e2", "珈乐": "#b8a6d9",
+                 "思诺": "#7252c0", "心宜": "#c93773"}
+OTHER_MEMBER = "#c8c6cc"
 WEEKDAYS = "一二三四五六日"
-HIGHLIGHTS = {"pink": (PRIMARY, BRAND_SOFT), "red": (ERROR, ERROR_BG), "platinum": ("#8b713e", "#f6f1e4")}
-
-
-def shade(color: str, factor: float) -> str:
-    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
-    return f"#{round(r * factor):02x}{round(g * factor):02x}{round(b * factor):02x}"
-
-
-def tint(color: str, amount: float) -> str:
-    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
-    m = lambda c: round(c + (255 - c) * amount)
-    return f"#{m(r):02x}{m(g):02x}{m(b):02x}"
-
-
-def member_style(name: str) -> tuple[str, str]:
-    """(text, background) for a member chip, keeping text readable on its tint."""
-    if name in MEMBER_COLORS:
-        base = MEMBER_COLORS[name]
-        return (base if name == "乃琳" else shade(base, 0.62)), tint(base, 0.84)
-    background, text = TINTS[sum(map(ord, name)) % len(TINTS)]
-    return text, background
+HIGHLIGHTS = {
+    "pink": {"glow": "#f5d5df", "fill": "#fff5f8", "outline": "#dd668d", "tile": "#f5cede", "badge": "#dd668d"},
+    "red": {"glow": "#efd1cb", "fill": "#fff5f2", "outline": "#b84d43", "tile": "#f0d0ca", "badge": "#b84d43"},
+    "platinum": {"glow": "#e5dcc9", "fill": "#fffdf6", "outline": "#9f8758", "tile": "#eee4cf", "badge": "#9f8758"},
+}
+TILE_WIDTH = 78
+STICKER_SIZES = {1: 60, 2: 44}    # By stickers in the slot; three or more use STICKER_MIN.
+STICKER_MIN = 33
+STICKER_GAP = 4
 
 
 def member_color(name: str) -> str:
-    return MEMBER_COLORS.get(name) or member_style(name)[0]
+    return MEMBER_COLORS.get(name, OTHER_MEMBER)
+
+
+def sticker_size(count: int) -> int:
+    return STICKER_SIZES.get(count, STICKER_MIN)
 
 
 @dataclass
@@ -72,9 +67,9 @@ def render_schedule(title: str, subtitle: str, days: list[Day], fonts: Fonts, *,
     chooser = random.Random()
     used: set[Path] = set()
 
-    def sticker(members: list[str]) -> Image.Image | None:
-        # Each row draws its own sticker; within one card a member's stickers do not repeat until used up.
-        pool = [path for name in members for path in stickers.get(name, [])]
+    def sticker(name: str) -> Image.Image | None:
+        # Within one card a member's stickers do not repeat until they are used up.
+        pool = stickers.get(name, [])
         fresh = [path for path in pool if path not in used] or pool
         if not fresh:
             return None
@@ -82,100 +77,132 @@ def render_schedule(title: str, subtitle: str, days: list[Day], fonts: Fonts, *,
         used.add(path)
         return Image.open(path)
 
-    header(card, "直播日历", title, subtitle)
+    title_header(card, "A-SOUL LIVE", title, subtitle)
     previous_empty = False
     for index, day in enumerate(days):
         empty = not day.entries
-
-        def paint_day(canvas, x, y, width, day=day, empty=empty):
-            date_style = Style(15, weight=700, color=SUBTLE if empty else INK)
-            right = draw_text(canvas, fonts, x, y + px(11), f"{day.day.month}月{day.day.day}日", date_style, anchor="lm")
-            right = draw_text(canvas, fonts, right + px(7), y + px(11), "周" + WEEKDAYS[day.day.weekday()],
-                              Style(13, color=SUBTLE if empty else MUTED), anchor="lm")
-            if day.today:
-                draw_chip(canvas, fonts, right + px(8), y + px(1), "今天", PRIMARY, BRAND_SOFT)
-            if empty:
-                draw_text(canvas, fonts, x + width, y + px(11), "无直播", Style(12.5, color=SUBTLE), anchor="rm")
-
-        # Runs of empty days stay close together; a day with lives opens a new section.
-        gap = 24 if index == 0 else 8 if empty and previous_empty else 20
-        card.add(px(22), paint_day, gap=gap)
+        if len(days) > 1:
+            # Runs of empty days stay close together; a day with lives opens a new section.
+            if index and not (empty and previous_empty):
+                divider(card, 18, dashed=True)
+            day_heading(card, day, 22 if index == 0 else 8 if empty and previous_empty else 16)
+        elif empty:
+            nothing(card, f"还没有查到{title}安排")
         for position, entry in enumerate(day.entries):
-            row(card, entry, sticker(entry.members), compact, first=position == 0)
+            art = [picture for picture in (sticker(name) for name in entry.members) if picture is not None]
+            row(card, entry, art, gap=(22 if len(days) == 1 else 12) if position == 0 else 10)
         previous_empty = empty
 
-    footer(card, "日程", source)
+    signature(card)
     return card.render()
 
 
-def row(card: Card, entry: Entry, art: Image.Image | None, compact: bool, *, first: bool = False) -> None:
+def nothing(card: Card, text: str) -> None:
+    """The whole body of a day with no lives."""
+    def paint(canvas, x, y, width):
+        box = (x, y, x + width, y + px(84))
+        fill(canvas, box, px(RADIUS), PINK_PALE)
+        ring(canvas, box, px(RADIUS), PINK_LINE, max(1, px(0.5)))
+        draw_text(canvas, card.fonts, x + width // 2, y + px(42), text, Style(16.5, color=MUTED), anchor="mm")
+
+    card.add(px(84), paint, gap=22)
+
+
+def day_heading(card: Card, day: Day, gap: float) -> None:
     fonts = card.fonts
-    pad = px(14)
-    bar_x = px(10)
-    time_x = px(22)
-    art_size = px(60 if compact else 76)
-    time_style = Style(18 if compact else 20, weight=700)
-    text_x = time_x + measure(fonts, "00:00", time_style) + px(14)
-    text_w = card.inner - text_x - pad - (art_size + px(8) if art is not None else 0)
-
-    accent, background = HIGHLIGHTS.get(entry.highlight_style, HIGHLIGHTS["pink"])
-    if not entry.highlight:
-        background = FILL
-        accent = member_color(entry.members[0]) if entry.members else IDLE
-    if entry.cancelled:
-        accent = IDLE
-
-    title_style = Style(15 if compact else 16.5, weight=600, color=SUBTLE if entry.cancelled else INK)
-    title_step = line_height(title_style, 1.45)
-    lines = wrap(fonts, entry.title, title_style, text_w, max_lines=3)
-
-    status = []
-    if entry.live_now:
-        status.append(("直播中", SUCCESS, SUCCESS_BG))
-    if entry.cancelled:
-        status.append(("已取消", ERROR, ERROR_BG))
-    if entry.highlight:
-        status.append(("特别关注", accent, "#ffffff"))
-    status_pos, status_h = flow(fonts, status, text_w)
-    members = [(name, *member_style(name)) for name in entry.members]
-    member_pos, member_h = flow(fonts, members, text_w)
-
-    content_h = (status_h + px(8) if status else 0) + len(lines) * title_step + (px(8) + member_h if members else 0)
-    time_style = Style(time_style.size, weight=700, color=SUBTLE if entry.cancelled else
-                       PRIMARY if entry.highlight and entry.highlight_style == "pink" else
-                       accent if entry.highlight else INK)
-    time_h = px(22 + (20 if entry.category else 0))
-    height = max(content_h, art_size, time_h) + 2 * pad
+    count = sum(not entry.cancelled for entry in day.entries)
+    empty = not day.entries
 
     def paint(canvas, x, y, width):
-        draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((x, y, x + width, y + height), radius=px(10), fill=background)
-        draw.rounded_rectangle((x + bar_x, y + pad + px(2), x + bar_x + px(3), y + height - pad - px(2)),
-                               radius=px(1.5), fill=accent)
-        draw_text(canvas, fonts, x + time_x, y + pad + px(3), f"{entry.start:%H:%M}", time_style)
-        if entry.category:
-            draw_text(canvas, fonts, x + time_x, y + pad + px(28), entry.category[:4], Style(11.5, color=MUTED))
+        middle = y + px(13)
+        right = draw_text(canvas, fonts, x, middle, f"{day.day.month}月{day.day.day}日",
+                          Style(18, weight=800, color=MUTED if empty else INK), anchor="lm")
+        right = draw_text(canvas, fonts, right + px(8), middle, "周" + WEEKDAYS[day.day.weekday()],
+                          Style(14.5, color=MUTED), anchor="lm")
+        if day.today:
+            draw_chip(canvas, fonts, right + px(9), y, "今天")
+        draw_text(canvas, fonts, x + width, middle, "无直播" if empty else f"{count} 条",
+                  Style(14, weight=600, color=MUTED if empty else PINK_TEXT), anchor="rm")
+
+    card.add(px(CHIP_HEIGHT), paint, gap=gap)
+
+
+def row(card: Card, entry: Entry, art: list[Image.Image], *, gap: float = 10) -> None:
+    fonts = card.fonts
+    pad = px(11)
+    tile_w = px(TILE_WIDTH)
+    text_x = pad + tile_w + px(14)
+    size = px(sticker_size(len(art)))
+    slot_w = (len(art) * size + (len(art) - 1) * px(STICKER_GAP) + px(10)) if art else 0
+    text_w = card.inner - text_x - px(12) - slot_w
+
+    colors = HIGHLIGHTS.get(entry.highlight_style, HIGHLIGHTS["pink"]) if entry.highlight else None
+    title_style = Style(17, weight=700, color=MUTED if entry.cancelled else INK)
+    title_step = line_height(title_style, 1.42)
+    lines = wrap(fonts, entry.title, title_style, text_w, max_lines=2)
+
+    pills = []
+    if entry.category:
+        pills.append((entry.category[:4], INK if not entry.cancelled else MUTED, SURFACE, QUOTE_LINE, None))
+    if entry.live_now:
+        pills.append(("直播中", SURFACE, PINK_TEXT, None, SURFACE))
+    if entry.cancelled:
+        pills.append(("已取消", MUTED, PICTURE_FILL, None, None))
+    if colors:
+        pills.append(("★ 特别关注", SURFACE, colors["badge"], None, None))
+
+    pill_style = Style(12, weight=700)
+    pill_h = 23
+    content_h = px(pill_h) + px(7) + len(lines) * title_step
+    height = max(content_h + 2 * px(13), px(84), size + px(22))
+
+    def paint(canvas, x, y, width):
+        box = (x, y, x + width, y + height)
+        if colors:
+            halo = px(3.5)
+            fill(canvas, (x - halo, y - halo, x + width + halo, y + height + halo), px(RADIUS) + halo, colors["glow"])
+        fill(canvas, box, px(RADIUS), colors["fill"] if colors else PICTURE_FILL if entry.cancelled else PINK_PALE)
+        ring(canvas, box, px(RADIUS), colors["outline"] if colors else QUOTE_LINE if entry.cancelled else PINK_LINE,
+             px(1.5) if colors else max(1, px(0.5)))
+
+        tile = (x + pad, y + px(11), x + pad + tile_w, y + height - px(11))
+        fill(canvas, tile, px(RADIUS), colors["tile"] if colors else SURFACE)
+        draw_text(canvas, fonts, (tile[0] + tile[2]) // 2, (tile[1] + tile[3]) // 2, f"{entry.start:%H:%M}",
+                  Style(20, weight=800, color=MUTED if entry.cancelled else INK), anchor="mm")
 
         top = y + (height - content_h) // 2
-        for cx, cy, label, fg, bg in status_pos:
-            draw_chip(canvas, fonts, x + text_x + cx, top + cy, label, fg, bg,
-                      outline=fg if bg == "#ffffff" else None)
-        ty = top + (status_h + px(8) if status else 0)
+        cursor = x + text_x
+        for label, fg, bg, edge, dot in pills:
+            cursor = draw_chip(canvas, fonts, cursor, top, label, fg, bg, style=pill_style, pad_x=9, height=pill_h,
+                               edge=edge, dot=dot) + px(6)
+        cursor += px(2)
+        limit = x + width - px(12) - slot_w
+        middle = top + px(pill_h) // 2
+        for name in entry.members:
+            room = limit - cursor - px(12)
+            if room < px(30):
+                break
+            r = px(3.5)
+            fill(canvas, (cursor, middle - r, cursor + 2 * r, middle + r), r, member_color(name))
+            cursor = draw_text(canvas, fonts, cursor + 2 * r + px(5), middle, fit(fonts, name, Style(13.5, weight=500), room),
+                               Style(13.5, weight=500, color=MUTED if entry.cancelled else INK_2), anchor="lm") + px(9)
+
+        ty = top + px(pill_h) + px(7)
         for text in lines:
-            right = draw_text(canvas, fonts, x + text_x, ty + (title_step - px(title_style.size)) // 2, text, title_style)
+            right = draw_text(canvas, fonts, x + text_x, ty + title_step // 2, text, title_style, anchor="lm")
             if entry.cancelled:
-                mid = ty + title_step // 2
-                draw.line((x + text_x, mid, right, mid), fill=MUTED, width=px(1.5))
+                fill(canvas, (x + text_x, ty + title_step // 2 - px(0.75), right, ty + title_step // 2 + px(0.75)), 1, MUTED)
             ty += title_step
-        ty += px(8)
-        for cx, cy, label, fg, bg in member_pos:
-            draw_chip(canvas, fonts, x + text_x + cx, ty + cy, label, fg, bg)
 
-        if art is not None:
-            picture = ImageOps.contain(art.convert("RGBA"), (art_size, art_size), Image.Resampling.LANCZOS)
+        sticker_x = x + width - px(12) - (slot_w - px(10))
+        for picture in art:
+            # A fixed square inside the row's padding, so a sticker cannot cross the block's edge.
+            fitted = ImageOps.contain(picture.convert("RGBA"), (size, size), Image.Resampling.LANCZOS)
             if entry.cancelled:
-                picture.putalpha(picture.getchannel("A").point(lambda a: a * 45 // 100))
-            canvas.alpha_composite(picture, (x + width - pad - art_size + (art_size - picture.width) // 2,
-                                             y + (height - picture.height) // 2))
+                alpha = fitted.getchannel("A").point(lambda a: a * 45 // 100)
+                fitted = ImageOps.grayscale(fitted).convert("RGBA")
+                fitted.putalpha(alpha)
+            canvas.alpha_composite(fitted, (sticker_x + (size - fitted.width) // 2, y + (height - fitted.height) // 2))
+            sticker_x += size + px(STICKER_GAP)
 
-    card.add(height, paint, gap=12 if first else 8)
+    card.add(height, paint, gap=gap)

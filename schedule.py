@@ -18,7 +18,7 @@ import httpx
 
 from len_bot.plugin import Image, Invocation, PluginContext, background, command, regex, tool
 
-from .card_kit import Fonts
+from .card_kit import Fonts, load_fonts
 from .ics import CalendarEvent, parse_calendar
 from .schedule_card import Day, Entry, render_schedule
 from .schedule_logic import ScheduleService, ScheduleItem
@@ -29,16 +29,11 @@ WEEKDAYS = "一二三四五六日"
 KEEP_REMINDED = 500
 ASSETS = Path(__file__).parent / "assets"
 FONT = ASSETS / "NotoSansSC.ttf"
-# Symbols and kaomoji the bundled font lacks; only fonts present on this machine are used.
-FALLBACK_FONTS = ("/Library/Fonts/Arial Unicode.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-                  "/System/Library/Fonts/Apple Symbols.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                  "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
-                  "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
 HIGHLIGHTS = "highlights"
 
 
 def card_fonts() -> Fonts:
-    return Fonts(FONT, fallbacks=tuple(Path(path) for path in FALLBACK_FONTS if Path(path).is_file()))
+    return load_fonts(FONT)
 
 
 def item_for(event: CalendarEvent | ScheduleItem) -> ScheduleItem:

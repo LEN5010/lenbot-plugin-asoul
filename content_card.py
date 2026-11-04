@@ -8,16 +8,16 @@ import json
 import re
 from zoneinfo import ZoneInfo
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 import qrcode
 
-from .card_kit import (Card, Fonts, Style, BRAND_SOFT, PRIMARY, INK, INK_2, MUTED, LINE, SURFACE, compact, circle,
-                       chip_width, flatten, hairline, header, Run, layout, draw_lines, draw_text, draw_chip, footer,
-                       measure, px, rounded)
+from .card_kit import (CHIP_HEIGHT, Card, Fonts, INK, MUTED, PINK, PINK_LINE, SURFACE, Style, compact, circle, chip_width,
+                       divider, draw_chip, draw_lines, draw_text, fill, fit, flatten, layout, px, qr_block, rounded, Run,
+                       signature, title_header)
 from .models import Dynamic, Fanart
 
-BODY = Style(15, color=INK_2)
-BODY_RATIO = 1.65
+BODY = Style(17.5, color=INK)
+BODY_RATIO = 1.66
 SITE = 'len5010.top/dynamics'
 
 
@@ -122,60 +122,48 @@ def image_grid(card: Card, pictures: list[Image.Image], total: int) -> None:
     more = total - columns
 
     def paint(canvas, x, y, width):
-        draw = ImageDraw.Draw(canvas)
         for index, (picture, (left, w, h)) in enumerate(zip(pictures, boxes)):
             tile = ImageOps.fit(picture, (w, h), Image.Resampling.LANCZOS)
             if index == columns - 1 and more > 0:
                 tile = Image.blend(tile, Image.new('RGB', tile.size, INK), 0.45)
-            canvas.alpha_composite(rounded(tile, 10), (x + left, y))
-            draw.rounded_rectangle((x + left, y, x + left + w - 1, y + h - 1), radius=px(10), outline=LINE,
-                                   width=hairline())
+            canvas.alpha_composite(rounded(tile), (x + left, y))
             if index == columns - 1 and more > 0:
                 draw_text(canvas, card.fonts, x + left + w / 2, y + h / 2, f'+{more}', Style(22, weight=700, color=SURFACE),
                           anchor='mm')
     card.add(height, paint, gap=12)
 
 
-def add_story(card: Card, item: Story, lines: list, pictures: dict[str, Image.Image], *, first: bool,
-              divider: bool) -> None:
+def add_story(card: Card, item: Story, lines: list, pictures: dict[str, Image.Image], *, first: bool, opening: bool) -> None:
     fonts = card.fonts
-    avatar_size = px(40)
+    avatar_size = px(46)
     chip = item.tags[:5] if item.tags and item.stamp else ''
 
     def author(canvas, x, y, width):
-        draw = ImageDraw.Draw(canvas)
-        top = y
-        if divider:
-            draw.line((x, y, x + width, y), fill=LINE, width=hairline())
-            top += px(20)
         avatar = pictures.get(item.avatar)
         if avatar:
-            canvas.alpha_composite(circle(avatar, avatar_size), (x, top))
+            canvas.alpha_composite(circle(avatar, avatar_size), (x, y))
         else:
-            draw.ellipse((x, top, x + avatar_size, top + avatar_size), fill=BRAND_SOFT)
-            draw_text(canvas, fonts, x + avatar_size // 2, top + avatar_size // 2, item.author[:1],
-                      Style(16, weight=700, color=PRIMARY), anchor='mm')
-        name_w = width - px(52) - (chip_width(fonts, chip) + px(8) if chip else 0)
-        name = item.author
-        while name and measure(fonts, name, Style(15, weight=600)) > name_w:
-            name = name[:-2] + '…'
-        draw_text(canvas, fonts, x + px(52), top + px(3), name, Style(15, weight=600, color=INK))
-        draw_text(canvas, fonts, x + px(52), top + px(25), item.stamp or item.tags, Style(12, color=MUTED))
+            fill(canvas, (x, y, x + avatar_size, y + avatar_size), avatar_size // 2, PINK_LINE)
+            draw_text(canvas, fonts, x + avatar_size // 2, y + avatar_size // 2, item.author[:1],
+                      Style(17, weight=800, color=PINK), anchor='mm')
+        name_w = width - px(58) - (chip_width(fonts, chip) + px(8) if chip else 0)
+        name_style = Style(18, weight=800, color=PINK)
+        draw_text(canvas, fonts, x + px(58), y + px(4), fit(fonts, item.author, name_style, name_w), name_style)
+        draw_text(canvas, fonts, x + px(58), y + px(29), item.stamp or item.tags, Style(13.5, color=MUTED))
         if chip:
-            draw_chip(canvas, fonts, x + width - chip_width(fonts, chip), top + (avatar_size - px(20)) // 2,
-                      chip, PRIMARY, BRAND_SOFT)
+            draw_chip(canvas, fonts, x + width - chip_width(fonts, chip), y + (avatar_size - px(CHIP_HEIGHT)) // 2, chip)
 
-    card.add(avatar_size + (px(20) if divider else 0), author, gap=20 if divider else 22)
+    card.add(avatar_size, author, gap=26 if opening else 18)
 
     def body(canvas, x, y, width):
         draw_lines(canvas, fonts, lines, x, y, BODY, ratio=BODY_RATIO)
     if lines:
-        card.add(len(lines) * px(BODY.size * BODY_RATIO), body, gap=10)
+        card.add(len(lines) * px(BODY.size * BODY_RATIO), body, gap=12)
     if first:
         image_grid(card, [pictures[url] for url in item.images[:3] if url in pictures], len(item.images))
         if item.metrics:
-            card.add(px(16), lambda canvas, x, y, w: draw_text(canvas, fonts, x, y + px(2), item.metrics,
-                                                                Style(12, color=MUTED)), gap=12)
+            card.add(px(18), lambda canvas, x, y, w: draw_text(canvas, fonts, x, y + px(2), item.metrics,
+                                                                Style(14, color="#686873")), gap=13)
 
 
 def qr_image(source: str) -> Image.Image:
@@ -186,14 +174,21 @@ def qr_image(source: str) -> Image.Image:
 
 
 def close(card: Card, source: str, many: bool) -> None:
-    footer(card, 'A-SOUL 动态站', SITE, qr=qr_image(source), qr_caption='扫码看第一条' if many else '扫码看原动态')
+    def details(canvas, x, y, width, height):
+        fonts = card.fonts
+        draw_text(canvas, fonts, x, y + px(24), 'A-SOUL 动态站', Style(17, weight=800, color=PINK), anchor='lm')
+        draw_text(canvas, fonts, x, y + px(47), SITE, Style(13, color=MUTED), anchor='lm')
+        draw_text(canvas, fonts, x, y + px(68), '扫码看第一条' if many else '扫码看原动态', Style(13, color=MUTED), anchor='lm')
+
+    qr_block(card, details, px(92), qr_image(source))
+    signature(card)
 
 
 def render_collection(title: str, subtitle: str, items: list[Dynamic | Fanart], fonts: Fonts,
                       pictures: dict[str, Image.Image], *, summary: bool = False) -> list[Page]:
     pages = []
     card = Card(fonts)
-    header(card, '动态查询站', title, subtitle)
+    title_header(card, 'A-SOUL 动态查询站', title, subtitle)
     source = items[0].url if isinstance(items[0], Dynamic) else items[0].sourceDynamicUrl
     descriptions = []
     for raw in items:
@@ -203,15 +198,18 @@ def render_collection(title: str, subtitle: str, items: list[Dynamic | Fanart], 
             lines = lines[:6]
         chunks = [lines[start:start+22] for start in range(0,len(lines),22)] or [[]]
         for index, chunk in enumerate(chunks):
-            estimate = px(90+len(chunk)*25+(300 if item.images and index==0 else 0))
+            estimate = px(100+len(chunk)*29+(340 if item.images and index==0 else 0))
             if descriptions and sum(h+gap for h,_,gap in card.blocks)+estimate>px(1100):
                 close(card, source, len(items) > 1)
                 pages.append(Page(card.render(),'\n\n'.join(descriptions)))
                 descriptions=[]
                 card=Card(fonts)
-                header(card, '动态查询站', title + ' · 续', subtitle)
-            add_story(card,item,chunk,pictures,first=index==0,divider=bool(descriptions))
-            description = '\n'.join(''.join(unit[1] if unit[0]=='text' else alt.get(id(unit[1]),'') for unit in line) for line in chunk)
+                title_header(card, 'A-SOUL 动态查询站', title + ' · 续', subtitle)
+            if descriptions:
+                divider(card, 22, dashed=True)
+            add_story(card,item,chunk,pictures,first=index==0,opening=not descriptions)
+            description = ''.join(''.join(unit[1] if unit[0]=='text' else alt.get(id(unit[1]),'') for unit in line)
+                                  + ('' if line.soft else '\n') for line in chunk).rstrip('\n')
             descriptions.append(item.author+'\n'+description+'\n'+item.metrics)
     close(card, source, len(items) > 1)
     pages.append(Page(card.render(),'\n\n'.join(descriptions)))

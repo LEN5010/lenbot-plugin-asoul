@@ -18,7 +18,7 @@
 
 ## 卡片与素材
 
-- `content_card.py`、`schedule_card.py` 使用 Pillow 和本插件 `card_kit.py`，按 LenBot `styles/tokens.css` 的白底、灰阶、粉色品牌色重做排版。动态站原文、媒体、公开统计与二维码采用上游功能。
-- `assets/NotoSansSC.ttf` 为 Google Fonts 分发的 Noto Sans SC 可变字重字体，按 SIL Open Font License 1.1 分发，许可证见 `assets/NotoSansSC-OFL.txt`。卡片按字重 400、600、700 取用。
+- 卡片样式来自仓库所有者的 `astrbot_plugin_asoul`：B 站卡片的 HTML 模板用 Pillow 重写，日程保留 `asoul_render.py` 的行布局和特别关注配色。`content_card.py`、`schedule_card.py` 使用 Pillow 和 `card_kit.py` 排版；`card_kit.py` 与 `lenbot-plugin-bilibili`、`lenbot-plugin-group-digest` 共用同一份，三个仓库一起修改。动态站原文、媒体、公开统计与二维码采用上游功能。
+- `assets/NotoSansSC.ttf` 为 Google Fonts 分发的 Noto Sans SC 可变字重字体，按 SIL Open Font License 1.1 分发，许可证见 `assets/NotoSansSC-OFL.txt`。卡片按字重 400 至 900 取用。
 - `assets/stickers/<成员名>/` 来自日程上游的成员表情，缩放至 160 像素并转换为 WebP。内容和素材的权利归各原权利人。
 - 插件代码按 GNU AGPL v3 或更新版本分发，见 [LICENSE](LICENSE)。

@@ -105,7 +105,7 @@ async def test_schedule_card_shows_cancelled_and_special_follow(source):
         assert "跳舞" in bot.deliveries[-1].text and "贝拉" in bot.deliveries[-1].text
         assert await bot.message("/日程")
         card, = bot.deliveries[-1].parts
-        assert isinstance(card, Image) and PILImage.open(BytesIO(card.data)).size[0] == 1080
+        assert isinstance(card, Image) and PILImage.open(BytesIO(card.data)).size[0] == 1200
         assert "跳舞（贝拉）（特别关注）" in card.description and "唱歌（思诺）（已取消）" in card.description
         found = json.loads(await bot.tool("live_schedule", {"start": today.date().isoformat()}))
         assert [event["special_follow"] for event in found["events"]] == [False, True]
@@ -124,3 +124,24 @@ async def test_cancelled_only_day_keeps_its_schedule_card(source):
         await bot.message('/日程')
         card, = bot.deliveries[-1].parts
         assert isinstance(card, Image) and '已取消' in card.description
+
+
+def test_schedule_card_handles_quiet_days_unknown_hosts_and_new_members():
+    from datetime import date
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location('asoul_cards', PACKAGE / '__init__.py',
+                                                  submodule_search_locations=[str(PACKAGE)])
+    package = sys.modules[spec.name] = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(package)
+    from asoul_cards.card_kit import load_fonts
+    from asoul_cards.schedule_card import Day, Entry, member_color, render_schedule
+    assert member_color('思诺') == '#7252c0' and member_color('心宜') == '#c93773'
+    fonts = load_fonts(PACKAGE / 'assets/NotoSansSC.ttf')
+    start = datetime(2026, 11, 4, 20)
+    days = [Day(date(2026, 11, 4), [Entry(start, '没写主播的节目' * 12), Entry(start, '访客', '节目', ['路人'], live_now=True),
+                                    Entry(start, '取消', '突击', ['嘉然'], cancelled=True, highlight=True)], today=True),
+            Day(date(2026, 11, 5), []), Day(date(2026, 11, 6), []), Day(date(2026, 11, 7), [Entry(start, '收尾', '', ['思诺', '心宜'])])]
+    for compact, chosen in ((True, days), (False, days[:1]), (False, days[1:2])):
+        card = render_schedule('本周直播', '说明', chosen, fonts, stickers={}, source='asoul.love', compact=compact)
+        assert PILImage.open(BytesIO(card)).size[0] == 1200
